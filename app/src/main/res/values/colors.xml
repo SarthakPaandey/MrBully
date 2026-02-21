@@ -1,0 +1,8 @@
+<resources>
+    <color name="black">#FF050505</color>
+    <color name="white">#FFF5F5F5</color>
+    <color name="brutal_red">#FFFF1744</color>
+    <color name="brutal_red_dark">#FFD50000</color>
+    <color name="deep_black">#FF050505</color>
+    <color name="dark_surface">#FF0F0F0F</color>
+</resources>
