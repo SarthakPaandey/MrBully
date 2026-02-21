@@ -1,11 +1,14 @@
 package com.brutal.accountability.service
 
 import android.accessibilityservice.AccessibilityService
-import android.content.Intent
+import android.Manifest
+import android.content.pm.PackageManager
+import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
+import androidx.core.content.ContextCompat
 import android.os.SystemClock
 import android.view.accessibility.AccessibilityEvent
 import com.brutal.accountability.BrutalApp
-import com.brutal.accountability.InterventionActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -37,11 +40,43 @@ class AppAccessibilityService : AccessibilityService() {
             if (!strict) return@launch
 
             lastTriggerAt = SystemClock.elapsedRealtime()
-            val intent = Intent(this@AppAccessibilityService, InterventionActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                .putExtra(InterventionActivity.EXTRA_PACKAGE_NAME, pkg)
-                .putExtra(InterventionActivity.EXTRA_WITH_HEADPHONES, withHeadphones)
-            startActivity(intent)
+            
+            val label = pkg.substringAfterLast('.')
+            val message = repository.generateInterventionLine(label)
+
+            val notificationManager = NotificationManagerCompat.from(this@AppAccessibilityService)
+
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                val channel = android.app.NotificationChannel(
+                    "intervention_channel",
+                    "Brutal Interventions",
+                    android.app.NotificationManager.IMPORTANCE_HIGH
+                )
+                notificationManager.createNotificationChannel(channel)
+            }
+
+            val notification = NotificationCompat.Builder(this@AppAccessibilityService, "intervention_channel")
+                .setSmallIcon(android.R.drawable.ic_dialog_alert)
+                .setContentTitle("BRUTAL INTERVENTION")
+                .setContentText(message)
+                .setStyle(NotificationCompat.BigTextStyle().bigText(message))
+                .setPriority(NotificationCompat.PRIORITY_MAX)
+                .setCategory(NotificationCompat.CATEGORY_ALARM)
+                .setVibrate(longArrayOf(0, 500, 200, 500))
+                .build()
+
+            if (ContextCompat.checkSelfPermission(
+                    this@AppAccessibilityService,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            ) {
+                notificationManager.notify(pkg.hashCode(), notification)
+            }
+
+            repository.insertEpisodic(
+                "App Block Escape",
+                "Escaped from $pkg intervention."
+            )
         }
     }
 

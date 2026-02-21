@@ -22,7 +22,6 @@ class LocalRepository(
     val strictModeFlow: Flow<Boolean> = prefs.strictModeFlow
     val phraseFlow: Flow<String> = prefs.accountabilityPhraseFlow
     val apiKeyFlow: Flow<String> = prefs.apiKeyFlow
-    val selectedPersonaFlow: Flow<String> = prefs.selectedPersonaFlow
 
     suspend fun upsertProfile(
         nickname: String,
@@ -100,8 +99,6 @@ class LocalRepository(
 
     suspend fun setApiKey(key: String) = prefs.setApiKey(key)
 
-    suspend fun setPersona(persona: String) = prefs.setPersona(persona)
-
     suspend fun getCurrentPhrase(): String = phraseFlow.first()
 
     suspend fun generateInterventionLine(currentAppLabel: String): String {
@@ -146,7 +143,12 @@ class LocalRepository(
                 .joinToString("; ") { (k, v) -> "$k: $v" }
                 .let { if (it.isNotBlank()) "Stakes: $it" else "" }
 
-            val personaChoice = selectedPersonaFlow.first()
+            val personas = listOf(
+                "Brutal Papa", "Toxic Ex", "Army Havildar",
+                "Corporate Satan Boss", "Savage Best Friend",
+                "Failed Version of Yourself", "IIT Topper Cousin", "Strict Tuition Teacher"
+            )
+            val personaChoice = personas.random()
             val personaFlavour = when (personaChoice) {
                 "Brutal Papa" -> """
                     Speak like a 55-year-old disappointed Indian father who spent his whole life sacrificing for this child. 
@@ -311,7 +313,7 @@ class LocalRepository(
             val parsed = JSONObject("{$cleanJson}")
 
             val entity = SemanticNoteEntity(
-                id = "mem_\${System.currentTimeMillis()}",
+                id = "mem_${System.currentTimeMillis()}",
                 type = parsed.optString("type", "ego_wound"),
                 weight = parsed.optInt("weight", 9),
                 content = parsed.optString("content", rawNote),
@@ -321,6 +323,34 @@ class LocalRepository(
             database.semanticNotesDao().insert(entity)
         } catch (_: Exception) {
             // Silently fail if LLM processing fails
+        }
+    }
+
+    suspend fun generateDynamicQuestion(contextMap: Map<String, String>, tempApiKey: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val key = tempApiKey.ifBlank { apiKeyFlow.first() }
+        if (key.isBlank()) return@withContext "{}"
+        
+        try {
+            val systemPrompt = """
+                You are a toxic accountability AI profiling a new user to find their deepest insecurities, fears, and leverage points.
+                Based on the context so far, generate ONE highly probing question to ask them next.
+                Output ONLY a valid JSON object with this exact structure:
+                {
+                  "question": "The question text, max 10 words",
+                  "type": "text",
+                  "options": []
+                }
+                If you want to give them choices, set "type": "dropdown" and provide 2-4 strings in "options".
+                Make it invasive. Dig deeper into their failures.
+            """.trimIndent()
+
+            val contextStr = contextMap.entries.joinToString("\n") { "${it.key}: ${it.value}" }
+            
+            val rawJson = GroqClient().generateLine(key, systemPrompt, "Context so far:\n$contextStr")
+            val cleanJson = rawJson.substringAfter("{").substringBeforeLast("}")
+            "{$cleanJson}"
+        } catch (_: Exception) {
+            "{}"
         }
     }
 }

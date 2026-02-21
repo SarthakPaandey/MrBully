@@ -45,7 +45,12 @@ class DailyCheckInWorker(
         repository?.let { repo ->
             val profile = repo.profileFlow.firstOrNull()
             val apiKey = repo.apiKeyFlow.firstOrNull()
-            val persona = repo.selectedPersonaFlow.firstOrNull() ?: "Brutal Papa"
+            val personas = listOf(
+                "Brutal Papa", "Toxic Ex", "Army Havildar",
+                "Corporate Satan Boss", "Savage Best Friend",
+                "Failed Version of Yourself", "IIT Topper Cousin", "Strict Tuition Teacher"
+            )
+            val persona = personas.random()
             
             if (profile != null && !apiKey.isNullOrBlank()) {
                 try {

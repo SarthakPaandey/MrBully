@@ -21,12 +21,19 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -57,7 +64,6 @@ fun NavGraph(repository: LocalRepository) {
     val restrictedApps by repository.restrictedAppsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val strictMode by repository.strictModeFlow.collectAsStateWithLifecycle(initialValue = true)
     val apiKey by repository.apiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
-    val selectedPersona by repository.selectedPersonaFlow.collectAsStateWithLifecycle(initialValue = "Brutal Papa")
     val scope = rememberCoroutineScope()
 
     val navController = rememberNavController()
@@ -148,22 +154,31 @@ fun NavGraph(repository: LocalRepository) {
             }
         ) {
             composable(Routes.ONBOARDING) {
-                OnboardingScreen(onSave = { payload ->
-                    scope.launch(Dispatchers.IO) {
-                        repository.upsertProfile(
-                            nickname = payload["Nickname"] ?: "",
-                            profession = payload["Profession"] ?: "",
-                            goal = payload["Goal"] ?: "",
-                            insecurity = payload["Insecurity"] ?: "",
-                            fear = payload["Fear"] ?: "",
-                            leverage = payload.filterKeys { k -> !k.startsWith("Persona") }
-                        )
-                        repository.setPersona(payload["Persona"] ?: "Brutal Papa")
+                OnboardingScreen(
+                    onSave = { payload ->
+                        scope.launch(Dispatchers.IO) {
+                            val apiKey = payload["API_KEY"] ?: ""
+                            if (apiKey.isNotBlank()) repository.setApiKey(apiKey)
+                            
+                            repository.upsertProfile(
+                                nickname = payload["Nickname"] ?: "",
+                                profession = payload["Profession"] ?: "",
+                                goal = payload["Goal"] ?: "",
+                                insecurity = payload["Insecurity"] ?: "",
+                                fear = payload["Fear"] ?: "",
+                                leverage = payload.filterKeys { k -> 
+                                    k !in listOf("Nickname", "Profession", "Goal", "Insecurity", "Fear", "API_KEY") 
+                                }
+                            )
+                        }
+                        navController.navigate(Routes.APPS) {
+                            popUpTo(Routes.ONBOARDING) { inclusive = true }
+                        }
+                    },
+                    onFetchQuestion = { contextMap, tempApiKey ->
+                        repository.generateDynamicQuestion(contextMap, tempApiKey)
                     }
-                    navController.navigate(Routes.APPS) {
-                        popUpTo(Routes.ONBOARDING) { inclusive = true }
-                    }
-                })
+                )
             }
 
             composable(Routes.APPS) {
@@ -178,20 +193,35 @@ fun NavGraph(repository: LocalRepository) {
                 )
             }
             composable(Routes.DASHBOARD) {
-                // Live check for accessibility service
-                val isAccessibilityEnabledState = androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf(false) }
-                val isAccessibilityEnabled = isAccessibilityEnabledState.value
-                androidx.compose.runtime.LaunchedEffect(Unit) {
+                val lifecycleOwner = LocalLifecycleOwner.current
+                var isAccessibilityEnabled by remember { mutableStateOf(false) }
+
+                fun refreshAccessibilityStatus() {
                     val am = context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
-                    isAccessibilityEnabledState.value = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC).any {
+                    isAccessibilityEnabled = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC).any {
                         it.resolveInfo.serviceInfo.packageName == context.packageName
+                    }
+                }
+
+                androidx.compose.runtime.LaunchedEffect(Unit) {
+                    refreshAccessibilityStatus()
+                }
+
+                DisposableEffect(lifecycleOwner) {
+                    val observer = LifecycleEventObserver { _, event ->
+                        if (event == Lifecycle.Event.ON_RESUME) {
+                            refreshAccessibilityStatus()
+                        }
+                    }
+                    lifecycleOwner.lifecycle.addObserver(observer)
+                    onDispose {
+                        lifecycleOwner.lifecycle.removeObserver(observer)
                     }
                 }
 
                 DashboardScreen(
                     strictMode = strictMode,
                     savedApiKey = apiKey,
-                    savedPersona = selectedPersona,
                     isAccessibilityEnabled = isAccessibilityEnabled,
                     onToggleStrictMode = { enabled ->
                         scope.launch(Dispatchers.IO) { repository.setStrictMode(enabled) }
@@ -212,9 +242,6 @@ fun NavGraph(repository: LocalRepository) {
                     },
                     onSaveApiKey = { key ->
                         scope.launch(Dispatchers.IO) { repository.setApiKey(key) }
-                    },
-                    onSavePersona = { persona ->
-                        scope.launch(Dispatchers.IO) { repository.setPersona(persona) }
                     }
                 )
             }

@@ -14,14 +14,12 @@ class AppPrefs(private val context: Context) {
     private val strictMode = booleanPreferencesKey("strict_mode")
     private val accountabilityPhrase = stringPreferencesKey("accountability_phrase")
     private val groqApiKey = stringPreferencesKey("groq_api_key")
-    private val selectedPersona = stringPreferencesKey("selected_persona")
 
     val strictModeFlow: Flow<Boolean> = context.dataStore.data.map { it[strictMode] ?: true }
     val accountabilityPhraseFlow: Flow<String> = context.dataStore.data.map {
         it[accountabilityPhrase] ?: "I choose discipline over distraction"
     }
     val apiKeyFlow: Flow<String> = context.dataStore.data.map { it[groqApiKey].orEmpty() }
-    val selectedPersonaFlow: Flow<String> = context.dataStore.data.map { it[selectedPersona] ?: "Brutal Papa" }
 
     suspend fun setStrictMode(enabled: Boolean) {
         context.dataStore.edit { it[strictMode] = enabled }
@@ -33,9 +31,5 @@ class AppPrefs(private val context: Context) {
 
     suspend fun setApiKey(key: String) {
         context.dataStore.edit { it[groqApiKey] = key }
-    }
-
-    suspend fun setPersona(persona: String) {
-        context.dataStore.edit { it[selectedPersona] = persona }
     }
 }

@@ -26,6 +26,8 @@ private val BrutalDarkColorScheme = darkColorScheme(
     onSurfaceVariant = TextSecondary,
     outline = DividerDark,
     outlineVariant = DividerDark,
+    inverseSurface = TextPrimary,
+    inverseOnSurface = DeepBlack,
     error = BrutalRed,
     onError = TextOnRed
 )

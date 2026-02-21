@@ -20,6 +20,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -44,6 +45,7 @@ import com.brutal.accountability.ui.theme.TextOnRed
 import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BrutalCard(
     modifier: Modifier = Modifier,
@@ -54,7 +56,8 @@ fun BrutalCard(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardSurface),
-        border = if (showAccent) BorderStroke(1.dp, BrutalRedSubtle) else BorderStroke(1.dp, DividerDark)
+        border = if (showAccent) BorderStroke(1.dp, BrutalRedSubtle) else BorderStroke(1.dp, DividerDark),
+        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -77,31 +80,18 @@ fun BrutalButton(
         enabled = enabled,
         shape = RoundedCornerShape(14.dp),
         colors = ButtonDefaults.buttonColors(
-            containerColor = BrutalRed,
+            containerColor = GradientRedStart,
             contentColor = TextOnRed,
             disabledContainerColor = BrutalRedDark.copy(alpha = 0.3f),
             disabledContentColor = TextMuted
-        )
+        ),
+        border = BorderStroke(1.dp, BrutalRedSubtle)
     ) {
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .background(
-                    brush = if (enabled) Brush.horizontalGradient(
-                        listOf(GradientRedStart, GradientRedEnd)
-                    ) else Brush.horizontalGradient(
-                        listOf(BrutalRedDark.copy(alpha = 0.3f), BrutalRedDark.copy(alpha = 0.3f))
-                    ),
-                    shape = RoundedCornerShape(14.dp)
-                )
-                .padding(vertical = 4.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelLarge
-            )
-        }
+        Text(
+            text = text,
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.padding(vertical = 4.dp)
+        )
     }
 }
 
@@ -126,7 +116,9 @@ fun BrutalTextField(
             focusedBorderColor = BrutalRed,
             unfocusedBorderColor = DividerDark,
             focusedLabelColor = BrutalRed,
-            unfocusedLabelColor = TextMuted
+            unfocusedLabelColor = TextMuted,
+            focusedContainerColor = CardSurface,
+            unfocusedContainerColor = CardSurface
         ),
         shape = RoundedCornerShape(14.dp)
     )

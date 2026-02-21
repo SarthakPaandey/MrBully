@@ -16,14 +16,6 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Brutal">
 
-        <activity
-            android:name=".InterventionActivity"
-            android:excludeFromRecents="true"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:showOnLockScreen="true"
-            android:taskAffinity=""
-            android:theme="@style/Theme.Brutal" />
 
         <activity
             android:name=".MainActivity"

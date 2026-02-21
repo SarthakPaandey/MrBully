@@ -12,12 +12,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Nightlight
-import androidx.compose.material.icons.filled.Psychology
 import androidx.compose.material.icons.filled.SaveAlt
-import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.WbSunny
-import androidx.compose.material3.DropdownMenu
-import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -44,26 +41,18 @@ import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
 
-private val personaList = listOf(
-    "Brutal Papa", "Toxic Ex", "Army Havildar",
-    "Corporate Satan Boss", "Savage Best Friend",
-    "Failed Version of Yourself", "IIT Topper Cousin", "Strict Tuition Teacher"
-)
-
 @androidx.compose.material3.ExperimentalMaterial3Api
 @Composable
 fun DashboardScreen(
     strictMode: Boolean,
     savedApiKey: String,
-    savedPersona: String,
     isAccessibilityEnabled: Boolean,
     onToggleStrictMode: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onSavePhrase: (String) -> Unit,
     onSaveDaily: (String, String) -> Unit,
     onRememberNote: (String) -> Unit,
-    onSaveApiKey: (String) -> Unit,
-    onSavePersona: (String) -> Unit
+    onSaveApiKey: (String) -> Unit
 ) {
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -121,45 +110,6 @@ fun DashboardScreen(
                                     uncheckedTrackColor = CardSurface
                                 )
                             )
-                        }
-                    }
-                }
-
-                // ─── AI Persona ───
-                item {
-                    BrutalCard {
-                        SectionHeader(title = "AI Persona", icon = Icons.Default.Psychology)
-                        var expanded by remember { mutableStateOf(false) }
-
-                        TextButton(onClick = { expanded = true }) {
-                            Text(
-                                "Current: $savedPersona  ▾",
-                                color = BrutalRed,
-                                style = MaterialTheme.typography.titleMedium
-                            )
-                        }
-
-                        DropdownMenu(
-                            expanded = expanded,
-                            onDismissRequest = { expanded = false }
-                        ) {
-                            personaList.forEach { persona ->
-                                DropdownMenuItem(
-                                    text = {
-                                        Text(
-                                            persona,
-                                            color = if (persona == savedPersona) BrutalRed else TextPrimary
-                                        )
-                                    },
-                                    onClick = {
-                                        onSavePersona(persona)
-                                        expanded = false
-                                        scope.launch {
-                                            snackbarHostState.showSnackbar("Persona set to $persona")
-                                        }
-                                    }
-                                )
-                            }
                         }
                     }
                 }
