@@ -16,8 +16,6 @@ import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Switch
-import androidx.compose.material3.SwitchDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -28,9 +26,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.text.font.FontWeight
 import com.brutal.accountability.ui.components.AnimatedScreen
 import com.brutal.accountability.ui.components.BrutalButton
 import com.brutal.accountability.ui.components.BrutalCard
+import com.brutal.accountability.ui.components.BrutalSwitch
 import com.brutal.accountability.ui.components.BrutalTextField
 import com.brutal.accountability.ui.components.SectionHeader
 import com.brutal.accountability.ui.theme.BrutalRed
@@ -68,10 +68,24 @@ fun DashboardScreen(
     ) { innerPadding ->
         AnimatedScreen {
             LazyColumn(
-                modifier = Modifier.padding(innerPadding),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                modifier = Modifier.padding(innerPadding).padding(horizontal = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(20.dp)
             ) {
-
+                item {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Your Accountability Dashboard",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Black,
+                        color = TextPrimary
+                    )
+                    Text(
+                        text = "Customize your suffering.",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = TextMuted
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                }
                 // ─── Monitoring Status ───
                 item {
                     BrutalCard {
@@ -95,20 +109,14 @@ fun DashboardScreen(
                             onClick = onOpenAccessibilitySettings
                         )
                         Row(
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Strict Mode", style = MaterialTheme.typography.titleMedium)
-                            Switch(
+                            Text("Strict Mode", style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                            BrutalSwitch(
                                 checked = strictMode,
-                                onCheckedChange = onToggleStrictMode,
-                                colors = SwitchDefaults.colors(
-                                    checkedThumbColor = BrutalRed,
-                                    checkedTrackColor = BrutalRed.copy(alpha = 0.3f),
-                                    uncheckedThumbColor = TextMuted,
-                                    uncheckedTrackColor = CardSurface
-                                )
+                                onCheckedChange = onToggleStrictMode
                             )
                         }
                     }

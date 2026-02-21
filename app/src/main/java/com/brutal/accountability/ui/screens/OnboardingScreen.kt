@@ -2,6 +2,7 @@ package com.brutal.accountability.ui.screens
 
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -130,12 +131,16 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Progress indicator
-            LinearProgressIndicator(
-                progress = { (currentStep + 1) / (3f + totalDynamicQuestions) },
-                modifier = Modifier.fillMaxWidth().height(4.dp),
-                color = BrutalRed,
-                trackColor = CardSurface
-            )
+            val progress = (currentStep + 1) / (3f + totalDynamicQuestions)
+            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress, label = "ProgressAnim")
+            Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(CardSurface, RoundedCornerShape(3.dp))) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth(animatedProgress)
+                        .fillMaxHeight()
+                        .background(androidx.compose.ui.graphics.Brush.horizontalGradient(listOf(GradientRedStart, GradientRedEnd)), RoundedCornerShape(3.dp))
+                )
+            }
 
             AnimatedContent(targetState = currentStep, label = "OnboardingSteps") { step ->
                 Column(
@@ -208,9 +213,9 @@ fun OnboardingScreen(
                                     horizontalAlignment = Alignment.CenterHorizontally,
                                     verticalArrangement = Arrangement.Center
                                 ) {
-                                    CircularProgressIndicator(color = BrutalRed)
-                                    Spacer(modifier = Modifier.height(16.dp))
-                                    Text("AI is analyzing your profile...", color = TextSecondary)
+                                    CircularProgressIndicator(color = BrutalRed, strokeWidth = 4.dp, modifier = Modifier.size(64.dp))
+                                    Spacer(modifier = Modifier.height(24.dp))
+                                    Text("AI is analyzing your profile...", style = MaterialTheme.typography.titleMedium, color = BrutalRedLight, fontWeight = FontWeight.Bold)
                                 }
                             } else {
                                 val currentQ = dynamicQuestions[dynIndex]
@@ -268,23 +273,16 @@ fun OnboardingScreen(
                                 itemsIndexed(personas) { index, persona ->
                                     AnimatedScreen(delayMillis = index * 50) {
                                         val isSelected = selectedPersona == persona.name
-                                        Card(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { selectedPersona = persona.name },
-                                            shape = RoundedCornerShape(16.dp),
-                                            colors = CardDefaults.cardColors(
-                                                containerColor = if (isSelected) BrutalRedSubtle else CardSurface
-                                            )
+                                        BrutalCard(
+                                            modifier = Modifier.clickable { selectedPersona = persona.name },
+                                            showAccent = isSelected
                                         ) {
                                             Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .padding(14.dp),
+                                                modifier = Modifier.fillMaxWidth(),
                                                 verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
                                             ) {
-                                                Text(persona.emoji, style = MaterialTheme.typography.headlineMedium)
+                                                Text(persona.emoji, style = MaterialTheme.typography.displaySmall)
                                                 Column(modifier = Modifier.weight(1f)) {
                                                     Text(
                                                         persona.name,
@@ -294,7 +292,8 @@ fun OnboardingScreen(
                                                     )
                                                     Text(
                                                         persona.tagline,
-                                                        style = MaterialTheme.typography.bodySmall
+                                                        style = MaterialTheme.typography.bodyMedium,
+                                                        color = TextMuted
                                                     )
                                                 }
                                                 RadioButton(

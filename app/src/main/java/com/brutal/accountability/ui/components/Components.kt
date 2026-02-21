@@ -7,6 +7,8 @@ import androidx.compose.animation.fadeIn
 import androidx.compose.animation.slideInVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -35,15 +37,25 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import com.brutal.accountability.ui.theme.BrutalRed
 import com.brutal.accountability.ui.theme.BrutalRedDark
+import com.brutal.accountability.ui.theme.BrutalRedLight
 import com.brutal.accountability.ui.theme.BrutalRedSubtle
 import com.brutal.accountability.ui.theme.CardSurface
+import com.brutal.accountability.ui.theme.DeepBlack
 import com.brutal.accountability.ui.theme.DividerDark
+import com.brutal.accountability.ui.theme.GlassSurface
+import com.brutal.accountability.ui.theme.GlowRed
 import com.brutal.accountability.ui.theme.GradientRedEnd
 import com.brutal.accountability.ui.theme.GradientRedStart
 import com.brutal.accountability.ui.theme.TextMuted
 import com.brutal.accountability.ui.theme.TextOnRed
 import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
+import androidx.compose.ui.draw.scale
+import androidx.compose.runtime.getValue
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.ui.graphics.SolidColor
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -55,9 +67,9 @@ fun BrutalCard(
     Card(
         modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = CardSurface),
-        border = if (showAccent) BorderStroke(1.dp, BrutalRedSubtle) else BorderStroke(1.dp, DividerDark),
-        elevation = CardDefaults.cardElevation(defaultElevation = 3.dp)
+        colors = CardDefaults.cardColors(containerColor = GlassSurface),
+        border = if (showAccent) BorderStroke(1.dp, GlowRed) else BorderStroke(1.dp, DividerDark.copy(alpha = 0.5f)),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
     ) {
         Column(
             modifier = Modifier.padding(18.dp),
@@ -74,24 +86,48 @@ fun BrutalButton(
     modifier: Modifier = Modifier,
     enabled: Boolean = true
 ) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val isPressed by interactionSource.collectIsPressedAsState()
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.96f else 1f,
+        animationSpec = tween(150),
+        label = "ButtonScale"
+    )
+
     Button(
         onClick = onClick,
-        modifier = modifier.fillMaxWidth(),
+        modifier = modifier
+            .fillMaxWidth()
+            .scale(scale),
         enabled = enabled,
         shape = RoundedCornerShape(14.dp),
+        contentPadding = androidx.compose.foundation.layout.PaddingValues(),
         colors = ButtonDefaults.buttonColors(
-            containerColor = GradientRedStart,
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
             contentColor = TextOnRed,
-            disabledContainerColor = BrutalRedDark.copy(alpha = 0.3f),
+            disabledContainerColor = androidx.compose.ui.graphics.Color.Transparent,
             disabledContentColor = TextMuted
         ),
-        border = BorderStroke(1.dp, BrutalRedSubtle)
+        border = if (enabled) BorderStroke(1.dp, BrutalRedLight.copy(alpha=0.5f)) else BorderStroke(1.dp, DividerDark),
+        interactionSource = interactionSource
     ) {
-        Text(
-            text = text,
-            style = MaterialTheme.typography.labelLarge,
-            modifier = Modifier.padding(vertical = 4.dp)
-        )
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    if (enabled) Brush.horizontalGradient(listOf(GradientRedStart, GradientRedEnd))
+                    else SolidColor(BrutalRedDark.copy(alpha = 0.3f))
+                )
+                .padding(vertical = 16.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                text = text,
+                style = MaterialTheme.typography.labelLarge,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                letterSpacing = androidx.compose.ui.unit.TextUnit(1f, androidx.compose.ui.unit.TextUnitType.Sp)
+            )
+        }
     }
 }
 
@@ -109,16 +145,17 @@ fun BrutalTextField(
         label = { Text(label, color = TextMuted) },
         modifier = modifier.fillMaxWidth(),
         singleLine = singleLine,
+        textStyle = MaterialTheme.typography.bodyLarge.copy(color = TextPrimary),
         colors = OutlinedTextFieldDefaults.colors(
             focusedTextColor = TextPrimary,
             unfocusedTextColor = TextSecondary,
-            cursorColor = BrutalRed,
+            cursorColor = BrutalRedLight,
             focusedBorderColor = BrutalRed,
-            unfocusedBorderColor = DividerDark,
-            focusedLabelColor = BrutalRed,
+            unfocusedBorderColor = DividerDark.copy(alpha=0.3f),
+            focusedLabelColor = BrutalRedLight,
             unfocusedLabelColor = TextMuted,
-            focusedContainerColor = CardSurface,
-            unfocusedContainerColor = CardSurface
+            focusedContainerColor = DeepBlack.copy(alpha=0.5f),
+            unfocusedContainerColor = CardSurface.copy(alpha=0.5f)
         ),
         shape = RoundedCornerShape(14.dp)
     )
@@ -165,5 +202,41 @@ fun AnimatedScreen(
                 )
     ) {
         content()
+    }
+}
+
+@Composable
+fun BrutalSwitch(
+    checked: Boolean,
+    onCheckedChange: (Boolean) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val thumbOffset by androidx.compose.animation.core.animateDpAsState(
+        targetValue = if (checked) 24.dp else 4.dp,
+        label = "SwitchThumbAnim"
+    )
+    val trackColor = if (checked) GlowRed else CardSurface
+    val thumbColor = if (checked) BrutalRed else TextMuted
+    val borderColor = if (checked) BrutalRed else DividerDark.copy(alpha = 0.5f)
+    
+    Box(
+        modifier = modifier
+            .size(width = 52.dp, height = 28.dp)
+            .background(trackColor, RoundedCornerShape(14.dp))
+            .border(1.dp, borderColor, RoundedCornerShape(14.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) { onCheckedChange(!checked) },
+        contentAlignment = Alignment.CenterStart
+    ) {
+        Box(
+            modifier = Modifier
+                .padding(start = thumbOffset)
+                .size(20.dp)
+                .background(thumbColor, RoundedCornerShape(10.dp))
+                // subtle glow
+                .border(1.dp, if (checked) BrutalRedLight else androidx.compose.ui.graphics.Color.Transparent, RoundedCornerShape(10.dp))
+        )
     }
 }

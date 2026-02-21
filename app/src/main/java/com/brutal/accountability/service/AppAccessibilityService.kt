@@ -13,6 +13,9 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import android.media.MediaPlayer
+import java.io.File
+import java.io.FileOutputStream
 
 class AppAccessibilityService : AccessibilityService() {
 
@@ -45,6 +48,28 @@ class AppAccessibilityService : AccessibilityService() {
             val message = repository.generateInterventionLine(label)
 
             val notificationManager = NotificationManagerCompat.from(this@AppAccessibilityService)
+
+            // Generate and play TTS in background without delaying the notification
+            scope.launch {
+                try {
+                    val audioBytes = repository.generateSpeech(message)
+                    if (audioBytes != null) {
+                        val file = File(cacheDir, "intervention.mp3")
+                        FileOutputStream(file).use { it.write(audioBytes) }
+                        
+                        val player = MediaPlayer()
+                        player.setDataSource(file.absolutePath)
+                        player.prepare()
+                        player.start()
+                        
+                        player.setOnCompletionListener {
+                            it.release()
+                        }
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
 
             if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
                 val channel = android.app.NotificationChannel(

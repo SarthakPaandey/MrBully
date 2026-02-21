@@ -18,6 +18,8 @@ class GroqClient {
     companion object {
         const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
         const val MODEL = "llama-3.3-70b-versatile"
+        const val TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
+        const val TTS_MODEL = "canopylabs/orpheus-v1-english"
     }
 
     fun generateLine(apiKey: String, systemPrompt: String, userContext: String): String {
@@ -54,6 +56,30 @@ class GroqClient {
                 .orEmpty()
                 .trim()
                 .ifBlank { "Stop wasting time. You know what you're supposed to be doing." }
+        }
+    }
+
+    fun generateSpeech(apiKey: String, input: String): ByteArray {
+        val body = JSONObject()
+            .put("model", TTS_MODEL)
+            .put("input", input)
+            .put("voice", "alloy")
+            .toString()
+            .toRequestBody(jsonType)
+
+        val request = Request.Builder()
+            .url(TTS_URL)
+            .addHeader("Authorization", "Bearer $apiKey")
+            .addHeader("Content-Type", "application/json")
+            .post(body)
+            .build()
+
+        client.newCall(request).execute().use { response ->
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string().orEmpty().take(240)
+                throw IllegalStateException("Groq call failed: ${response.code} ${response.message} | $errorBody")
+            }
+            return response.body?.bytes() ?: throw IllegalStateException("Empty response body")
         }
     }
 }

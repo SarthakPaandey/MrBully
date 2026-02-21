@@ -251,6 +251,18 @@ class LocalRepository(
         }
     }
 
+    suspend fun generateSpeech(text: String): ByteArray? {
+        val key = apiKeyFlow.first().trim()
+        if (key.isBlank() || !key.startsWith("gsk_")) return null
+
+        return try {
+            GroqClient().generateSpeech(apiKey = key, input = text)
+        } catch (e: Exception) {
+            Log.e("LocalRepository", "Groq TTS generation failed", e)
+            null
+        }
+    }
+
     fun parseLeverageJson(leverageJson: String): List<Pair<String, String>> {
         return try {
             val json = JSONObject(leverageJson)

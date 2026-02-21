@@ -19,6 +19,12 @@ val CardSurface = Color(0xFF1A2233)
 val CardSurfaceElevated = Color(0xFF222D42)
 val DividerDark = Color(0xFF2D3A53)
 
+// ─── Glassmorphism & Glow ───
+val GlassSurface = Color(0x991A2233)
+val GlassSurfaceElevated = Color(0xCC222D42)
+val GlowRed = Color(0x4DFF2D55)
+val GlowAccent = Color(0x33B388FF)
+
 // ─── Text ───
 val TextPrimary = Color(0xFFF3F7FF)
 val TextSecondary = Color(0xFFC2CCDE)
