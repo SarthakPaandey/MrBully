@@ -1,6 +1,7 @@
 package com.brutal.accountability.data
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import org.json.JSONArray
@@ -97,7 +98,7 @@ class LocalRepository(
 
     suspend fun setPhrase(phrase: String) = prefs.setPhrase(phrase)
 
-    suspend fun setApiKey(key: String) = prefs.setApiKey(key)
+    suspend fun setApiKey(key: String) = prefs.setApiKey(key.trim())
 
     suspend fun getCurrentPhrase(): String = phraseFlow.first()
 
@@ -106,9 +107,12 @@ class LocalRepository(
         val nickname = profile?.nickname ?: "You"
         val goal = profile?.goal ?: "your goal"
 
-        val key = apiKeyFlow.first()
+        val key = apiKeyFlow.first().trim()
         if (key.isBlank()) {
             return "$nickname — put down $currentAppLabel. $goal is waiting."
+        }
+        if (!key.startsWith("gsk_")) {
+            return "$nickname, this does not look like a Groq key. Save a valid gsk_ key."
         }
 
         return try {
@@ -235,8 +239,15 @@ class LocalRepository(
                 systemPrompt = systemPrompt,
                 userContext = userContext
             )
-        } catch (_: Exception) {
-            "$nickname, $currentAppLabel is why you'll still be mediocre next year."
+        } catch (e: Exception) {
+            Log.e("LocalRepository", "Groq intervention generation failed", e)
+            val fallbackLines = listOf(
+                "$currentAppLabel is stealing your future while you watch.",
+                "$currentAppLabel again? You're choosing easy over your own goal.",
+                "This is exactly how people stay average for years.",
+                "One more scroll, one less step toward $goal."
+            )
+            "$nickname, ${fallbackLines.random()}"
         }
     }
 

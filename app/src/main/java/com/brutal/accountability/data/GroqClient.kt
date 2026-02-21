@@ -41,7 +41,10 @@ class GroqClient {
             .build()
 
         client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) throw IllegalStateException("Groq call failed: ${response.code}")
+            if (!response.isSuccessful) {
+                val errorBody = response.body?.string().orEmpty().take(240)
+                throw IllegalStateException("Groq call failed: ${response.code} ${response.message} | $errorBody")
+            }
             val payload = response.body?.string().orEmpty()
             return JSONObject(payload)
                 .optJSONArray("choices")
