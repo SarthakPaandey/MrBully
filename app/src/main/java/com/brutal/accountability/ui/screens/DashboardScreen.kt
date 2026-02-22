@@ -12,12 +12,15 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Nightlight
+import androidx.compose.material.icons.filled.Psychology
+import androidx.compose.material.icons.filled.QueryStats
 import androidx.compose.material.icons.filled.SaveAlt
 import androidx.compose.material.icons.filled.WbSunny
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -27,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import com.brutal.accountability.data.EventLogEntity
 import com.brutal.accountability.ui.components.AnimatedScreen
 import com.brutal.accountability.ui.components.BrutalButton
 import com.brutal.accountability.ui.components.BrutalCard
@@ -46,13 +50,15 @@ import kotlinx.coroutines.launch
 fun DashboardScreen(
     strictMode: Boolean,
     savedApiKey: String,
+    recentEvents: List<EventLogEntity>,
     isAccessibilityEnabled: Boolean,
     onToggleStrictMode: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
     onSavePhrase: (String) -> Unit,
     onSaveDaily: (String, String) -> Unit,
     onRememberNote: (String) -> Unit,
-    onSaveApiKey: (String) -> Unit
+    onSaveApiKey: (String) -> Unit,
+    onAskAiPartner: suspend (String) -> String
 ) {
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -61,6 +67,19 @@ fun DashboardScreen(
     var nightReflection by remember { mutableStateOf("") }
     var note by remember { mutableStateOf("") }
     var apiKeyInput by remember(savedApiKey) { mutableStateOf(savedApiKey) }
+    var partnerInput by remember { mutableStateOf("") }
+    var partnerReply by remember { mutableStateOf<String?>(null) }
+    var isPartnerLoading by remember { mutableStateOf(false) }
+
+    val now = System.currentTimeMillis()
+    val dayMillis = 24L * 60L * 60L * 1000L
+    val weekMillis = 7L * dayMillis
+    val violationsToday = recentEvents.count { now - it.atMillis <= dayMillis }
+    val violationsWeek = recentEvents.count { now - it.atMillis <= weekMillis }
+    val topOffender = recentEvents
+        .groupingBy { it.packageName.substringAfterLast('.') }
+        .eachCount()
+        .maxByOrNull { it.value }
 
     androidx.compose.material3.Scaffold(
         snackbarHost = { androidx.compose.material3.SnackbarHost(snackbarHostState) },
@@ -119,6 +138,29 @@ fun DashboardScreen(
                                 onCheckedChange = onToggleStrictMode
                             )
                         }
+                    }
+                }
+
+                // ─── Home Stats ───
+                item {
+                    BrutalCard {
+                        SectionHeader(title = "Home Stats", icon = Icons.Default.QueryStats)
+                        Text(
+                            text = "Violations today: $violationsToday",
+                            style = MaterialTheme.typography.titleMedium,
+                            fontWeight = FontWeight.Bold,
+                            color = TextPrimary
+                        )
+                        Text(
+                            text = "Violations in 7 days: $violationsWeek",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        Text(
+                            text = "Top distraction: ${topOffender?.key ?: "None yet"}",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
                     }
                 }
 
@@ -224,6 +266,41 @@ fun DashboardScreen(
                             },
                             enabled = apiKeyInput.isNotBlank()
                         )
+                    }
+                }
+
+                // ─── AI Partner ───
+                item {
+                    BrutalCard {
+                        SectionHeader(title = "AI Partner", icon = Icons.Default.Psychology)
+                        Text(
+                            "Ask for a plan, reset, or strict guidance.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = TextSecondary
+                        )
+                        BrutalTextField(
+                            value = partnerInput,
+                            onValueChange = { partnerInput = it },
+                            label = "What do you need help with?"
+                        )
+                        BrutalButton(
+                            text = if (isPartnerLoading) "ASKING..." else "ASK AI PARTNER",
+                            onClick = {
+                                scope.launch {
+                                    isPartnerLoading = true
+                                    partnerReply = onAskAiPartner(partnerInput)
+                                    isPartnerLoading = false
+                                }
+                            },
+                            enabled = partnerInput.isNotBlank() && !isPartnerLoading
+                        )
+                        partnerReply?.let {
+                            Text(
+                                text = it,
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = TextPrimary
+                            )
+                        }
                     }
                 }
 

@@ -5,8 +5,6 @@ import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -18,25 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.brutal.accountability.ui.components.*
 import com.brutal.accountability.ui.theme.*
-import kotlinx.coroutines.launch
 import org.json.JSONObject
-
-private data class PersonaOption(
-    val name: String,
-    val emoji: String,
-    val tagline: String
-)
-
-private val personas = listOf(
-    PersonaOption("Brutal Papa", "👨‍👦", "Disappointed father energy"),
-    PersonaOption("Toxic Ex", "💔", "Your worst breakup personified"),
-    PersonaOption("Army Havildar", "🪖", "Boot camp discipline"),
-    PersonaOption("Corporate Satan Boss", "👔", "Your nightmare manager"),
-    PersonaOption("Savage Best Friend", "🔥", "No filter, no mercy"),
-    PersonaOption("Failed Version of Yourself", "🪞", "Mirror of regret"),
-    PersonaOption("IIT Topper Cousin", "📚", "Sharma ji ka beta"),
-    PersonaOption("Strict Tuition Teacher", "👩‍🏫", "Ruler-wielding terror")
-)
 
 private data class DynamicQuestion(
     val id: String,
@@ -61,7 +41,6 @@ fun OnboardingScreen(
     // Dynamic steps state
     var isLoadingQuestion by remember { mutableStateOf(false) }
     val dynamicQuestions = remember { mutableStateListOf<DynamicQuestion>() }
-    var selectedPersona by remember { mutableStateOf("Brutal Papa") }
     
     val totalDynamicQuestions = 3
 
@@ -73,11 +52,10 @@ fun OnboardingScreen(
             answers["Nickname"] = nickname
             answers["Goal"] = goal
             currentStep++
-        } else if (currentStep >= 2 && currentStep < 2 + totalDynamicQuestions) {
+        } else if (currentStep >= 2 && currentStep < 1 + totalDynamicQuestions) {
             currentStep++
-        } else if (currentStep == 2 + totalDynamicQuestions) {
+        } else if (currentStep == 1 + totalDynamicQuestions) {
             val payload = answers.toMutableMap()
-            payload["Persona"] = selectedPersona
             onSave(payload)
         }
     }
@@ -131,7 +109,7 @@ fun OnboardingScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             // Progress indicator
-            val progress = (currentStep + 1) / (3f + totalDynamicQuestions)
+            val progress = (currentStep + 1) / (2f + totalDynamicQuestions)
             val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress, label = "ProgressAnim")
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(CardSurface, RoundedCornerShape(3.dp))) {
                 Box(
@@ -257,63 +235,11 @@ fun OnboardingScreen(
                                 }
                                 Spacer(modifier = Modifier.weight(1f))
                                 BrutalButton(
-                                    text = "NEXT →",
+                                    text = if (dynIndex == totalDynamicQuestions - 1) "FINALIZE PROFILE" else "NEXT →",
                                     onClick = { proceedToNext() },
                                     enabled = !answers[currentQ.question].isNullOrBlank()
                                 )
                             }
-                        }
-                        step == 2 + totalDynamicQuestions -> {
-                            // Persona selection
-                            SectionHeader(title = "Choose Your Bully", icon = Icons.Default.Person)
-                            LazyColumn(
-                                verticalArrangement = Arrangement.spacedBy(12.dp),
-                                modifier = Modifier.weight(1f)
-                            ) {
-                                itemsIndexed(personas) { index, persona ->
-                                    AnimatedScreen(delayMillis = index * 50) {
-                                        val isSelected = selectedPersona == persona.name
-                                        BrutalCard(
-                                            modifier = Modifier.clickable { selectedPersona = persona.name },
-                                            showAccent = isSelected
-                                        ) {
-                                            Row(
-                                                modifier = Modifier.fillMaxWidth(),
-                                                verticalAlignment = Alignment.CenterVertically,
-                                                horizontalArrangement = Arrangement.spacedBy(16.dp)
-                                            ) {
-                                                Text(persona.emoji, style = MaterialTheme.typography.displaySmall)
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        persona.name,
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = if (isSelected) TextPrimary else TextSecondary
-                                                    )
-                                                    Text(
-                                                        persona.tagline,
-                                                        style = MaterialTheme.typography.bodyMedium,
-                                                        color = TextMuted
-                                                    )
-                                                }
-                                                RadioButton(
-                                                    selected = isSelected,
-                                                    onClick = { selectedPersona = persona.name },
-                                                    colors = RadioButtonDefaults.colors(
-                                                        selectedColor = BrutalRed,
-                                                        unselectedColor = TextSecondary
-                                                    )
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(16.dp))
-                            BrutalButton(
-                                text = "FINALIZE PROFILE",
-                                onClick = { proceedToNext() }
-                            )
                         }
                     }
                 }

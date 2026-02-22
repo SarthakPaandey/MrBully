@@ -7,13 +7,21 @@ import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
+import com.brutal.accountability.data.ApiKeyCipher
 import com.brutal.accountability.data.AccountabilityDatabase
 import com.brutal.accountability.data.AppPrefs
 import com.brutal.accountability.data.LocalRepository
 import com.brutal.accountability.service.DailyCheckInWorker
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.util.concurrent.TimeUnit
 
 class BrutalApp : Application() {
+
+    private val appScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     lateinit var repository: LocalRepository
         private set
@@ -27,6 +35,13 @@ class BrutalApp : Application() {
             prefs = prefs,
             applicationContext = this
         )
+        appScope.launch {
+            val existing = repository.apiKeyFlow.first().trim()
+            val buildKey = BuildConfig.GROQ_API_KEY.trim()
+            if (existing.isBlank() && buildKey.startsWith("gsk_")) {
+                repository.setApiKey(buildKey)
+            }
+        }
         createChannel()
         scheduleDailyCheckIn()
     }

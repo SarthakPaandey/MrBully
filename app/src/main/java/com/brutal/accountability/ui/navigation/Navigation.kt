@@ -62,6 +62,7 @@ fun NavGraph(repository: LocalRepository) {
     val context = LocalContext.current
     val profile by repository.profileFlow.collectAsStateWithLifecycle(initialValue = null)
     val restrictedApps by repository.restrictedAppsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
+    val recentEvents by repository.recentEventsFlow.collectAsStateWithLifecycle(initialValue = emptyList())
     val strictMode by repository.strictModeFlow.collectAsStateWithLifecycle(initialValue = true)
     val apiKey by repository.apiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
     val scope = rememberCoroutineScope()
@@ -222,6 +223,7 @@ fun NavGraph(repository: LocalRepository) {
                 DashboardScreen(
                     strictMode = strictMode,
                     savedApiKey = apiKey,
+                    recentEvents = recentEvents,
                     isAccessibilityEnabled = isAccessibilityEnabled,
                     onToggleStrictMode = { enabled ->
                         scope.launch(Dispatchers.IO) { repository.setStrictMode(enabled) }
@@ -242,6 +244,9 @@ fun NavGraph(repository: LocalRepository) {
                     },
                     onSaveApiKey = { key ->
                         scope.launch(Dispatchers.IO) { repository.setApiKey(key) }
+                    },
+                    onAskAiPartner = { message ->
+                        repository.generateAiPartnerReply(message)
                     }
                 )
             }

@@ -20,6 +20,8 @@ class GroqClient {
         const val MODEL = "llama-3.3-70b-versatile"
         const val TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
         const val TTS_MODEL = "canopylabs/orpheus-v1-english"
+        const val TTS_VOICE_PRIMARY = "echo"
+        const val TTS_VOICE_SECONDARY = "onyx"
     }
 
     fun generateLine(apiKey: String, systemPrompt: String, userContext: String): String {
@@ -60,10 +62,16 @@ class GroqClient {
     }
 
     fun generateSpeech(apiKey: String, input: String): ByteArray {
+        return runCatching { requestSpeech(apiKey = apiKey, input = input, voice = TTS_VOICE_PRIMARY) }
+            .recoverCatching { requestSpeech(apiKey = apiKey, input = input, voice = TTS_VOICE_SECONDARY) }
+            .getOrThrow()
+        }
+
+        private fun requestSpeech(apiKey: String, input: String, voice: String): ByteArray {
         val body = JSONObject()
             .put("model", TTS_MODEL)
             .put("input", input)
-            .put("voice", "alloy")
+            .put("voice", voice)
             .toString()
             .toRequestBody(jsonType)
 

@@ -45,19 +45,13 @@ class DailyCheckInWorker(
         repository?.let { repo ->
             val profile = repo.profileFlow.firstOrNull()
             val apiKey = repo.apiKeyFlow.firstOrNull()
-            val personas = listOf(
-                "Brutal Papa", "Toxic Ex", "Army Havildar",
-                "Corporate Satan Boss", "Savage Best Friend",
-                "Failed Version of Yourself", "IIT Topper Cousin", "Strict Tuition Teacher"
-            )
-            val persona = personas.random()
             
             if (profile != null && !apiKey.isNullOrBlank()) {
                 try {
                     val prompt = """
-                        You are $persona. Write a 1-sentence push notification to the user (${profile.nickname}) 
+                        You are a strict MALE accountability voice in the user's phone. Write a 1-sentence push notification to the user (${profile.nickname}) 
                         reminding them to do their daily checkin. Mention their goal (${profile.goal}) and their insecurity (${profile.insecurity}).
-                        Make it harsh and guilt-inducing. No quotes, no intro.
+                        Make it harsh and guilt-inducing. Keep it fresh and different from generic lines. No quotes, no intro.
                     """.trimIndent()
                     aiMessage = com.brutal.accountability.data.GroqClient().generateLine(apiKey, prompt, "Remind me.")
                 } catch (e: Exception) {

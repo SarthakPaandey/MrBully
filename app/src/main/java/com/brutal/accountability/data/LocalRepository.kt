@@ -16,6 +16,7 @@ class LocalRepository(
     private val prefs: AppPrefs,
     private val applicationContext: Context
 ) {
+    private var lastInterventionLine: String? = null
 
     val profileFlow: Flow<UserProfileEntity?> = database.profileDao().observeProfile()
     val restrictedAppsFlow: Flow<List<RestrictedAppEntity>> = database.restrictedAppsDao().observeAll()
@@ -147,70 +148,28 @@ class LocalRepository(
                 .joinToString("; ") { (k, v) -> "$k: $v" }
                 .let { if (it.isNotBlank()) "Stakes: $it" else "" }
 
-            val personas = listOf(
-                "Brutal Papa", "Toxic Ex", "Army Havildar",
-                "Corporate Satan Boss", "Savage Best Friend",
-                "Failed Version of Yourself", "IIT Topper Cousin", "Strict Tuition Teacher"
-            )
-            val personaChoice = personas.random()
-            val personaFlavour = when (personaChoice) {
-                "Brutal Papa" -> """
-                    Speak like a 55-year-old disappointed Indian father who spent his whole life sacrificing for this child. 
-                    Heavy use of "beta", "sharam nahi aati?", "humne kya socha tha aur tu kya kar raha hai".
-                """.trimIndent()
-                "Toxic Ex" -> """
-                    Use "baby", "jaan", sarcastic "wow", bring up old promises they made to you, 
-                    compare to new person they're dating, weaponise nostalgia + betrayal.
-                """.trimIndent()
-                "Army Havildar" -> """
-                    Scream-style language, lots of "Oye!!!", "Saale!!!", "100 baar bola tha!!!", 
-                    counting push-ups style threats (but only psychological), pure volume and authority.
-                """.trimIndent()
-                "Corporate Satan Boss" -> """
-                    Very polished yet cruel English + Hinglish mix. Use corporate buzzwords ironically 
-                    ("you're not delivering value", "this is not the bandwidth we discussed", "I expected better ROI on you").
-                """.trimIndent()
-                "Savage Best Friend" -> """
-                    Extremely bro-coded roast, lots of "bhai", "chutiye", "Abe yaar fir se?", 
-                    insider jokes, group shame ("sab bol rahe the tu nahi sudhrega").
-                """.trimIndent()
-                "Failed Version of Yourself" -> """
-                    Speak in first person as future depressed version. "Main bol raha hu… 38 saal ka ho gaya aur 
-                    abhi bhi yahi kar raha hu", heavy regret, "ab toh kuch nahi bachega".
-                """.trimIndent()
-                "IIT Topper Cousin" -> """
-                    Condescending academic superiority tone. "Bhai tu toh abhi bhi Instagram pe hai? 
-                    Main tab tak 3 companies join kar chuka hu."
-                """.trimIndent()
-                "Strict Tuition Teacher" -> """
-                    Ruler-wielding terror. Constant disappointment about focus. "Scale padega hath pe! 
-                    Focus kahan hai tera? Fail hone ka irada hai board exams mein?"
-                """.trimIndent()
-                else -> "" // Brutal Papa default
-            }
-
-            // --- BRUTAL system prompt ---
             val systemPrompt = """
                 You are the voice inside the user's phone whose only job is to shame them into keeping their promises.
+                Always speak as a MALE voice.
                 You speak in short, vicious, emotionally targeted sentences.
                 Use Hinglish whenever it hurts more.
                 Always use the user's nickname.
                 Never threaten physical violence or self-harm.
                 Focus entirely on: guilt, wasted potential, social embarrassment, parental disappointment, money/status loss, being average, broken promises.
-                
-                You are now role-playing as: $personaChoice
-                
-                $personaFlavour
-                
+
+                Do not use any persona, character roleplay, or celebrity imitation.
+                Every response must be a NEW roast and should not repeat phrasing from previous responses.
                 Keep each message 1-3 short sentences max. Make it sting instantly.
             """.trimIndent()
 
             // --- RAG user context ---
             val userContext = buildString {
+                val attemptToken = System.currentTimeMillis().toString()
                 appendLine("Nickname: $nickname")
                 appendLine("Current app opened: $currentAppLabel")
                 val currentTime = SimpleDateFormat("h:mm a", Locale.getDefault()).format(Date())
                 appendLine("Time: $currentTime")
+                appendLine("Attempt token: $attemptToken")
                 appendLine("Today's goal they are breaking: $goal")
                 
                 if (checkinContext.isNotBlank()) appendLine("Yesterday's waste / Today's plan: $checkinContext")
@@ -230,15 +189,32 @@ class LocalRepository(
                     appendLine(notes)
                 }
                 if (recentViolations.isNotBlank()) appendLine("Recent violations today: $recentViolations")
+                if (!lastInterventionLine.isNullOrBlank()) {
+                    appendLine("Previous roast used: ${lastInterventionLine}")
+                    appendLine("Write a different roast than the previous one.")
+                }
                 
                 appendLine("Generate the savage bullying message RIGHT NOW.")
             }
 
-            GroqClient().generateLine(
+            val line = GroqClient().generateLine(
                 apiKey = key,
                 systemPrompt = systemPrompt,
                 userContext = userContext
-            )
+            ).trim()
+
+            val finalLine = if (line.equals(lastInterventionLine, ignoreCase = true)) {
+                val fallbackVariants = listOf(
+                    "$nickname, stop looping the same mistake. New rule: no $currentAppLabel till work is done.",
+                    "$nickname, same pattern again. Close $currentAppLabel and earn your respect back.",
+                    "$nickname, you're repeating failure in real time. $currentAppLabel closes now."
+                )
+                fallbackVariants[(System.currentTimeMillis() % fallbackVariants.size).toInt()]
+            } else {
+                line
+            }
+            lastInterventionLine = finalLine
+            finalLine
         } catch (e: Exception) {
             Log.e("LocalRepository", "Groq intervention generation failed", e)
             val fallbackLines = listOf(
@@ -260,6 +236,53 @@ class LocalRepository(
         } catch (e: Exception) {
             Log.e("LocalRepository", "Groq TTS generation failed", e)
             null
+        }
+    }
+
+    suspend fun generateAiPartnerReply(userMessage: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        val cleanMessage = userMessage.trim()
+        if (cleanMessage.isBlank()) return@withContext "Type something first."
+
+        val profile = database.profileDao().getProfile()
+        val nickname = profile?.nickname ?: "friend"
+        val goal = profile?.goal ?: "your goal"
+        val insecurity = profile?.insecurity ?: ""
+
+        val recentViolations = database.eventLogDao().observeRecent().first().take(5)
+        val violationContext = if (recentViolations.isEmpty()) {
+            "No recent violations recorded."
+        } else {
+            recentViolations.joinToString(", ") { it.packageName.substringAfterLast('.') }
+        }
+
+        val key = apiKeyFlow.first().trim()
+        if (key.isBlank() || !key.startsWith("gsk_")) {
+            return@withContext "I’m here, $nickname. No API key set yet—save a valid Groq key to enable AI partner replies."
+        }
+
+        return@withContext try {
+            val systemPrompt = """
+                You are a direct but supportive accountability AI partner.
+                Keep reply to 2-4 lines max.
+                Use practical steps, not fluff.
+                Use light Hinglish if natural.
+                Be strict, respectful, and action-oriented.
+                Never suggest self-harm or abuse.
+            """.trimIndent()
+
+            val context = """
+                User nickname: $nickname
+                Main goal: $goal
+                Insecurity: $insecurity
+                Recent restricted-app violations: $violationContext
+                User message: $cleanMessage
+            """.trimIndent()
+
+            GroqClient().generateLine(key, systemPrompt, context)
+                .ifBlank { "$nickname, next step: put phone down for 10 minutes and start one task toward $goal." }
+        } catch (e: Exception) {
+            Log.e("LocalRepository", "AI partner generation failed", e)
+            "$nickname, quick reset: 1) close distractions, 2) 10-minute timer, 3) start the first task toward $goal."
         }
     }
 

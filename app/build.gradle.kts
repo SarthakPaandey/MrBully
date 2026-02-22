@@ -1,8 +1,24 @@
+import java.util.Properties
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("com.google.devtools.ksp")
 }
+
+val localProps = Properties().apply {
+    val localPropsFile = rootProject.file("local.properties")
+    if (localPropsFile.exists()) {
+        localPropsFile.inputStream().use { load(it) }
+    }
+}
+
+val groqApiKeyFromBuildInput = ((project.findProperty("GROQ_API_KEY") as? String)
+    ?: System.getenv("GROQ_API_KEY")
+    ?: localProps.getProperty("GROQ_API_KEY")
+    ?: "")
+    .replace("\\", "\\\\")
+    .replace("\"", "\\\"")
 
 android {
     namespace = "com.brutal.accountability"
@@ -22,6 +38,7 @@ android {
 
         buildConfigField("String", "GROQ_BASE_URL", "\"https://api.groq.com/openai/v1/\"")
         buildConfigField("String", "GROQ_MODEL", "\"llama-3.3-70b-versatile\"")
+        buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKeyFromBuildInput\"")
     }
 
     buildTypes {
