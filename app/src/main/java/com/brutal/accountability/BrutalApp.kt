@@ -7,7 +7,6 @@ import android.content.Context
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkManager
-import com.brutal.accountability.data.ApiKeyCipher
 import com.brutal.accountability.data.AccountabilityDatabase
 import com.brutal.accountability.data.AppPrefs
 import com.brutal.accountability.data.LocalRepository
@@ -38,7 +37,7 @@ class BrutalApp : Application() {
         appScope.launch {
             val existing = repository.apiKeyFlow.first().trim()
             val buildKey = BuildConfig.GROQ_API_KEY.trim()
-            if (existing.isBlank() && buildKey.startsWith("gsk_")) {
+            if (buildKey.startsWith("gsk_") && existing != buildKey) {
                 repository.setApiKey(buildKey)
             }
         }

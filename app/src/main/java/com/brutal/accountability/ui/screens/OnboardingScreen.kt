@@ -66,8 +66,8 @@ fun OnboardingScreen(
             if (dynIndex >= dynamicQuestions.size) {
                 // Fetch new question
                 isLoadingQuestion = true
-                val jsonStr = onFetchQuestion(answers, apiKey)
                 try {
+                    val jsonStr = onFetchQuestion(answers, apiKey)
                     val json = JSONObject(jsonStr)
                     val qText = json.optString("question", "What else are you hiding?")
                     val qType = json.optString("type", "text")
@@ -97,8 +97,9 @@ fun OnboardingScreen(
                             options = emptyList()
                         )
                     )
+                } finally {
+                    isLoadingQuestion = false
                 }
-                isLoadingQuestion = false
             }
         }
     }

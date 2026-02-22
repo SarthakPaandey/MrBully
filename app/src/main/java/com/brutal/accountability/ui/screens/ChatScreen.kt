@@ -3,6 +3,7 @@ package com.brutal.accountability.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -71,8 +72,8 @@ fun ChatScreen(
 
             item {
                 BrutalCard {
-                    LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        items(messages) { message ->
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        messages.forEach { message ->
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()

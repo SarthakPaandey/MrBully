@@ -413,8 +413,22 @@ class LocalRepository(
     }
 
     suspend fun generateDynamicQuestion(contextMap: Map<String, String>, tempApiKey: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-        val key = tempApiKey.ifBlank { apiKeyFlow.first() }
-        if (key.isBlank()) return@withContext "{}"
+        val key = tempApiKey.ifBlank { apiKeyFlow.first() }.trim()
+
+        fun localFallbackQuestion(): String {
+            val question = when {
+                !contextMap["Goal"].isNullOrBlank() && contextMap["What are you avoiding?"].isNullOrBlank() -> "What are you avoiding right now?"
+                !contextMap["Nickname"].isNullOrBlank() && contextMap["Who would be disappointed?"].isNullOrBlank() -> "Who feels your broken promises first?"
+                else -> "What is your deepest flaw?"
+            }
+            return JSONObject()
+                .put("question", question)
+                .put("type", "text")
+                .put("options", JSONArray())
+                .toString()
+        }
+
+        if (key.isBlank() || !key.startsWith("gsk_")) return@withContext localFallbackQuestion()
         
         try {
             val systemPrompt = """
@@ -436,7 +450,7 @@ class LocalRepository(
             val cleanJson = rawJson.substringAfter("{").substringBeforeLast("}")
             "{$cleanJson}"
         } catch (_: Exception) {
-            "{}"
+            localFallbackQuestion()
         }
     }
 }

@@ -17,7 +17,11 @@ class GroqClient {
 
     companion object {
         const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
-        const val MODEL = "llama-3.3-70b-versatile"
+        private val CHAT_MODELS = listOf(
+            "openai/gpt-oss-120b",
+            "openai/gpt-oss-20b",
+            "llama-3.3-70b-versatile"
+        )
         const val TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
         const val TTS_MODEL = "canopylabs/orpheus-v1-english"
         const val TTS_VOICE_PRIMARY = "echo"
@@ -25,40 +29,52 @@ class GroqClient {
     }
 
     fun generateLine(apiKey: String, systemPrompt: String, userContext: String): String {
-        val messages = JSONArray()
-            .put(JSONObject().put("role", "system").put("content", systemPrompt))
-            .put(JSONObject().put("role", "user").put("content", userContext))
+        var lastError: String? = null
+        for (model in CHAT_MODELS) {
+            try {
+                val messages = JSONArray()
+                    .put(JSONObject().put("role", "system").put("content", systemPrompt))
+                    .put(JSONObject().put("role", "user").put("content", userContext))
 
-        val body = JSONObject()
-            .put("model", MODEL)
-            .put("messages", messages)
-            .put("max_tokens", 60)
-            .put("temperature", 0.9)
-            .toString()
-            .toRequestBody(jsonType)
+                val body = JSONObject()
+                    .put("model", model)
+                    .put("messages", messages)
+                    .put("max_tokens", 120)
+                    .put("temperature", 0.9)
+                    .toString()
+                    .toRequestBody(jsonType)
 
-        val request = Request.Builder()
-            .url(BASE_URL)
-            .addHeader("Authorization", "Bearer $apiKey")
-            .addHeader("Content-Type", "application/json")
-            .post(body)
-            .build()
+                val request = Request.Builder()
+                    .url(BASE_URL)
+                    .addHeader("Authorization", "Bearer $apiKey")
+                    .addHeader("Content-Type", "application/json")
+                    .post(body)
+                    .build()
 
-        client.newCall(request).execute().use { response ->
-            if (!response.isSuccessful) {
-                val errorBody = response.body?.string().orEmpty().take(240)
-                throw IllegalStateException("Groq call failed: ${response.code} ${response.message} | $errorBody")
+                client.newCall(request).execute().use { response ->
+                    if (!response.isSuccessful) {
+                        val errorBody = response.body?.string().orEmpty().take(240)
+                        lastError = "model=$model code=${response.code} msg=${response.message} body=$errorBody"
+                        return@use
+                    }
+
+                    val payload = response.body?.string().orEmpty()
+                    val content = JSONObject(payload)
+                        .optJSONArray("choices")
+                        ?.optJSONObject(0)
+                        ?.optJSONObject("message")
+                        ?.optString("content")
+                        .orEmpty()
+                        .trim()
+                        .ifBlank { "Stop wasting time. You know what you're supposed to be doing." }
+                    return content
+                }
+            } catch (e: Exception) {
+                lastError = "model=$model exception=${e.message}"
             }
-            val payload = response.body?.string().orEmpty()
-            return JSONObject(payload)
-                .optJSONArray("choices")
-                ?.optJSONObject(0)
-                ?.optJSONObject("message")
-                ?.optString("content")
-                .orEmpty()
-                .trim()
-                .ifBlank { "Stop wasting time. You know what you're supposed to be doing." }
         }
+
+        throw IllegalStateException("Groq chat call failed for all models. Last error: $lastError")
     }
 
     fun generateSpeech(apiKey: String, input: String): ByteArray {
