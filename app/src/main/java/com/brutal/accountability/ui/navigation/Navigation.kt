@@ -6,27 +6,28 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Apps
-import androidx.compose.material.icons.filled.Dashboard
+import androidx.compose.material.icons.filled.Chat
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.rememberCoroutineScope
-import androidx.compose.runtime.setValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -40,12 +41,13 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.brutal.accountability.data.LocalRepository
-import com.brutal.accountability.ui.screens.DashboardScreen
+import com.brutal.accountability.ui.screens.ChatScreen
+import com.brutal.accountability.ui.screens.HomeScreen
 import com.brutal.accountability.ui.screens.OnboardingScreen
 import com.brutal.accountability.ui.screens.RestrictedAppsScreen
+import com.brutal.accountability.ui.screens.SettingsScreen
 import com.brutal.accountability.ui.theme.BrutalRed
 import com.brutal.accountability.ui.theme.DeepBlack
-import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -53,8 +55,16 @@ import kotlinx.coroutines.launch
 object Routes {
     const val ONBOARDING = "onboarding"
     const val APPS = "apps"
-    const val DASHBOARD = "dashboard"
+    const val HOME = "home"
+    const val CHAT = "chat"
+    const val SETTINGS = "settings"
 }
+
+private data class BottomTab(
+    val route: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -71,7 +81,13 @@ fun NavGraph(repository: LocalRepository) {
     val currentBackStack by navController.currentBackStackEntryAsState()
     val currentRoute = currentBackStack?.destination?.route
 
-    val startDestination = if (profile == null) Routes.ONBOARDING else Routes.DASHBOARD
+    val startDestination = if (profile == null) Routes.ONBOARDING else Routes.HOME
+    val tabs = listOf(
+        BottomTab(Routes.HOME, "Home", Icons.Default.Home),
+        BottomTab(Routes.CHAT, "Chat", Icons.Default.Chat),
+        BottomTab(Routes.SETTINGS, "Settings", Icons.Default.Settings)
+    )
+    val showBottomBar = profile != null && currentRoute in tabs.map { it.route }
 
     Scaffold(
         containerColor = DeepBlack,
@@ -88,38 +104,44 @@ fun NavGraph(repository: LocalRepository) {
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = DeepBlack,
                     titleContentColor = BrutalRed
-                ),
-                actions = {
-                    if (profile != null) {
-                        IconButton(onClick = {
-                            if (currentRoute != Routes.DASHBOARD) {
-                                navController.navigate(Routes.DASHBOARD) {
-                                    popUpTo(Routes.DASHBOARD) { inclusive = true }
+                )
+            )
+        },
+        bottomBar = {
+            if (showBottomBar) {
+                NavigationBar(
+                    containerColor = DeepBlack
+                ) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route,
+                            onClick = {
+                                if (currentRoute != tab.route) {
+                                    navController.navigate(tab.route) {
+                                        popUpTo(Routes.HOME) { saveState = true }
+                                        launchSingleTop = true
+                                        restoreState = true
+                                    }
                                 }
+                            },
+                            icon = {
+                                Icon(
+                                    imageVector = tab.icon,
+                                    contentDescription = tab.label,
+                                    tint = if (currentRoute == tab.route) BrutalRed else TextSecondary
+                                )
+                            },
+                            label = {
+                                Text(
+                                    text = tab.label,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (currentRoute == tab.route) BrutalRed else TextSecondary
+                                )
                             }
-                        }) {
-                            Icon(
-                                Icons.Default.Dashboard,
-                                contentDescription = "Dashboard",
-                                tint = if (currentRoute == Routes.DASHBOARD) BrutalRed else TextSecondary
-                            )
-                        }
-                        IconButton(onClick = {
-                            if (currentRoute != Routes.APPS) {
-                                navController.navigate(Routes.APPS) {
-                                    popUpTo(Routes.DASHBOARD)
-                                }
-                            }
-                        }) {
-                            Icon(
-                                Icons.Default.Apps,
-                                contentDescription = "Apps",
-                                tint = if (currentRoute == Routes.APPS) BrutalRed else TextSecondary
-                            )
-                        }
+                        )
                     }
                 }
-            )
+            }
         }
     ) { innerPadding ->
         NavHost(
@@ -158,8 +180,8 @@ fun NavGraph(repository: LocalRepository) {
                 OnboardingScreen(
                     onSave = { payload ->
                         scope.launch(Dispatchers.IO) {
-                            val apiKey = payload["API_KEY"] ?: ""
-                            if (apiKey.isNotBlank()) repository.setApiKey(apiKey)
+                            val payloadApiKey = payload["API_KEY"] ?: ""
+                            if (payloadApiKey.isNotBlank()) repository.setApiKey(payloadApiKey)
                             
                             repository.upsertProfile(
                                 nickname = payload["Nickname"] ?: "",
@@ -187,13 +209,31 @@ fun NavGraph(repository: LocalRepository) {
                     initiallySelected = restrictedApps,
                     onSave = { apps ->
                         scope.launch(Dispatchers.IO) { repository.setRestrictedApps(apps) }
-                        navController.navigate(Routes.DASHBOARD) {
+                        navController.navigate(Routes.HOME) {
                             popUpTo(Routes.APPS) { inclusive = true }
                         }
                     }
                 )
             }
-            composable(Routes.DASHBOARD) {
+
+            composable(Routes.HOME) {
+                HomeScreen(
+                    recentEvents = recentEvents,
+                    onGenerateRoast = {
+                        repository.generateInterventionLine("your distraction apps")
+                    }
+                )
+            }
+
+            composable(Routes.CHAT) {
+                ChatScreen(
+                    onAskAiPartner = { message ->
+                        repository.generateAiPartnerReply(message)
+                    }
+                )
+            }
+
+            composable(Routes.SETTINGS) {
                 val lifecycleOwner = LocalLifecycleOwner.current
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
 
@@ -220,10 +260,9 @@ fun NavGraph(repository: LocalRepository) {
                     }
                 }
 
-                DashboardScreen(
+                SettingsScreen(
                     strictMode = strictMode,
                     savedApiKey = apiKey,
-                    recentEvents = recentEvents,
                     isAccessibilityEnabled = isAccessibilityEnabled,
                     onToggleStrictMode = { enabled ->
                         scope.launch(Dispatchers.IO) { repository.setStrictMode(enabled) }
@@ -244,9 +283,6 @@ fun NavGraph(repository: LocalRepository) {
                     },
                     onSaveApiKey = { key ->
                         scope.launch(Dispatchers.IO) { repository.setApiKey(key) }
-                    },
-                    onAskAiPartner = { message ->
-                        repository.generateAiPartnerReply(message)
                     }
                 )
             }
