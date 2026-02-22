@@ -109,6 +109,11 @@ fun SettingsScreen(
                             color = notificationStatusColor,
                             fontWeight = FontWeight.Bold
                         )
+                        Text(
+                            text = "TTS needs no extra Android permission. If Groq voice fails, accept its model terms once in Groq console. Device TTS fallback will still speak.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = TextMuted
+                        )
                         BrutalButton(
                             text = "OPEN ACCESSIBILITY SETTINGS",
                             onClick = onOpenAccessibilitySettings

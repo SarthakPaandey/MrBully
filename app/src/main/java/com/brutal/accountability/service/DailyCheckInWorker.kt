@@ -2,7 +2,6 @@ package com.brutal.accountability.service
 
 import android.Manifest
 import android.app.PendingIntent
-import android.app.NotificationManager
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
@@ -14,6 +13,9 @@ import androidx.work.WorkerParameters
 import com.brutal.accountability.MainActivity
 import com.brutal.accountability.R
 import kotlinx.coroutines.flow.firstOrNull
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 class DailyCheckInWorker(
     appContext: Context,
@@ -44,16 +46,45 @@ class DailyCheckInWorker(
         
         repository?.let { repo ->
             val profile = repo.profileFlow.firstOrNull()
-            val apiKey = repo.apiKeyFlow.firstOrNull()
-            
-            if (profile != null && !apiKey.isNullOrBlank()) {
+            val apiKey = repo.apiKeyFlow.firstOrNull().orEmpty().trim()
+
+            if (profile != null && apiKey.startsWith("gsk_")) {
                 try {
+                    val leverage = repo.parseLeverageJson(profile.leverageJson)
+                    val relationship = leverage.firstOrNull {
+                        it.first.equals("Relationship status", ignoreCase = true)
+                    }?.second.orEmpty()
+                    val avoiding = leverage.firstOrNull {
+                        it.first.equals("What are you avoiding?", ignoreCase = true)
+                    }?.second.orEmpty()
+                    val gymStatus = leverage.firstOrNull {
+                        it.first.equals("Gym status", ignoreCase = true)
+                    }?.second.orEmpty()
+                    val now = SimpleDateFormat("EEE, h:mm a", Locale.getDefault()).format(Date())
+                    val attemptToken = System.currentTimeMillis().toString()
+
                     val prompt = """
-                        You are a strict MALE accountability voice in the user's phone. Write a 1-sentence push notification to the user (${profile.nickname}) 
-                        reminding them to do their daily checkin. Mention their goal (${profile.goal}) and their insecurity (${profile.insecurity}).
+                        You are a strict MALE accountability voice in the user's phone.
+                        Write a 1-sentence push notification reminder for the user's daily check-in.
+                        Personalize with their profile details and current context.
                         Make it harsh and guilt-inducing. Keep it fresh and different from generic lines. No quotes, no intro.
                     """.trimIndent()
-                    aiMessage = com.brutal.accountability.data.GroqClient().generateLine(apiKey, prompt, "Remind me.")
+
+                    val context = buildString {
+                        appendLine("Nickname: ${profile.nickname}")
+                        appendLine("Goal: ${profile.goal}")
+                        if (profile.profession.isNotBlank()) appendLine("Current stage: ${profile.profession}")
+                        if (profile.insecurity.isNotBlank()) appendLine("Insecurity: ${profile.insecurity}")
+                        if (profile.fear.isNotBlank()) appendLine("Fear: ${profile.fear}")
+                        if (relationship.isNotBlank()) appendLine("Relationship status: $relationship")
+                        if (avoiding.isNotBlank()) appendLine("Avoiding: $avoiding")
+                        if (gymStatus.isNotBlank()) appendLine("Gym status: $gymStatus")
+                        appendLine("Current time: $now")
+                        appendLine("Variation token: $attemptToken")
+                    }
+                    aiMessage = com.brutal.accountability.data.GroqClient()
+                        .generateLine(apiKey, prompt, context)
+                        .ifBlank { aiMessage }
                 } catch (e: Exception) {
                     // Fallback to default if network or API fails
                 }

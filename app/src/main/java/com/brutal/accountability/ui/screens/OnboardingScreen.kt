@@ -3,7 +3,6 @@ package com.brutal.accountability.ui.screens
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.ExperimentalAnimationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -18,11 +17,15 @@ import com.brutal.accountability.ui.components.*
 import com.brutal.accountability.ui.theme.*
 import org.json.JSONObject
 
-private data class DynamicQuestion(
-    val id: String,
-    val question: String,
-    val type: String, // "text" or "dropdown"
-    val options: List<String>
+private enum class OnboardingQuestionType { TEXT, DROPDOWN }
+
+private data class OnboardingQuestion(
+    val key: String,
+    val prompt: String,
+    val type: OnboardingQuestionType,
+    val options: List<String> = emptyList(),
+    val inputLabel: String = "Your answer",
+    val singleLine: Boolean = true
 )
 
 @OptIn(ExperimentalAnimationApi::class)
@@ -33,73 +36,220 @@ fun OnboardingScreen(
 ) {
     var currentStep by remember { mutableIntStateOf(0) }
     val answers = remember { mutableStateMapOf<String, String>() }
-    
+
     var apiKey by remember { mutableStateOf("") }
     var nickname by remember { mutableStateOf("") }
     var goal by remember { mutableStateOf("") }
-    
-    // Dynamic steps state
+
+    val staticQuestions = remember {
+        listOf(
+            OnboardingQuestion(
+                key = "Profession",
+                prompt = "What stage are you in right now?",
+                type = OnboardingQuestionType.DROPDOWN,
+                options = listOf(
+                    "College student",
+                    "Working professional",
+                    "Preparing for exams",
+                    "Building startup/business",
+                    "Freelancer / creator",
+                    "Other"
+                ),
+                inputLabel = "Choose your current stage"
+            ),
+            OnboardingQuestion(
+                key = "Relationship status",
+                prompt = "What is your relationship situation?",
+                type = OnboardingQuestionType.DROPDOWN,
+                options = listOf(
+                    "Single",
+                    "In a relationship",
+                    "Complicated",
+                    "Recently went through a breakup",
+                    "Prefer not to say"
+                ),
+                inputLabel = "Choose relationship status"
+            ),
+            OnboardingQuestion(
+                key = "Is an ex still affecting focus?",
+                prompt = "Is an ex still affecting your focus?",
+                type = OnboardingQuestionType.DROPDOWN,
+                options = listOf(
+                    "Yes, a lot",
+                    "Sometimes",
+                    "No"
+                ),
+                inputLabel = "Choose one"
+            ),
+            OnboardingQuestion(
+                key = "College or office environment",
+                prompt = "Where do distractions hit you more?",
+                type = OnboardingQuestionType.DROPDOWN,
+                options = listOf(
+                    "College",
+                    "Office",
+                    "Home",
+                    "Everywhere"
+                ),
+                inputLabel = "Pick your main environment"
+            ),
+            OnboardingQuestion(
+                key = "Gym status",
+                prompt = "What is your gym / fitness situation?",
+                type = OnboardingQuestionType.DROPDOWN,
+                options = listOf(
+                    "Regularly going",
+                    "Inconsistent but trying",
+                    "Want to start soon",
+                    "Not a priority right now"
+                ),
+                inputLabel = "Pick your fitness status"
+            ),
+            OnboardingQuestion(
+                key = "Who would be disappointed?",
+                prompt = "Whose respect are you risking if you stay distracted?",
+                type = OnboardingQuestionType.TEXT,
+                inputLabel = "Name people who matter",
+                singleLine = false
+            ),
+            OnboardingQuestion(
+                key = "What are you avoiding?",
+                prompt = "What hard task are you avoiding every day?",
+                type = OnboardingQuestionType.TEXT,
+                inputLabel = "Be brutally specific",
+                singleLine = false
+            ),
+            OnboardingQuestion(
+                key = "Current routine",
+                prompt = "What does your current daily routine look like?",
+                type = OnboardingQuestionType.TEXT,
+                inputLabel = "Morning to night in short",
+                singleLine = false
+            ),
+            OnboardingQuestion(
+                key = "Insecurity",
+                prompt = "What insecurity hurts you the most right now?",
+                type = OnboardingQuestionType.TEXT,
+                inputLabel = "The insecurity you hide",
+                singleLine = false
+            ),
+            OnboardingQuestion(
+                key = "Fear",
+                prompt = "If this distraction continues, what are you most scared of?",
+                type = OnboardingQuestionType.TEXT,
+                inputLabel = "Your biggest fear",
+                singleLine = false
+            )
+        )
+    }
+
+    val totalAiQuestions = 2
+    val totalQuestionSteps = staticQuestions.size + totalAiQuestions
+    val finalQuestionStep = 1 + totalQuestionSteps
+
     var isLoadingQuestion by remember { mutableStateOf(false) }
-    val dynamicQuestions = remember { mutableStateListOf<DynamicQuestion>() }
-    
-    val totalDynamicQuestions = 3
+    val aiQuestions = remember { mutableStateListOf<OnboardingQuestion>() }
+
+    fun currentQuestion(step: Int): OnboardingQuestion? {
+        val questionIndex = step - 2
+        if (questionIndex !in 0 until totalQuestionSteps) return null
+        return if (questionIndex < staticQuestions.size) {
+            staticQuestions[questionIndex]
+        } else {
+            val aiIndex = questionIndex - staticQuestions.size
+            aiQuestions.getOrNull(aiIndex)
+        }
+    }
 
     fun proceedToNext() {
-        if (currentStep == 0) {
-            answers["API_KEY"] = apiKey
-            currentStep++
-        } else if (currentStep == 1) {
-            answers["Nickname"] = nickname
-            answers["Goal"] = goal
-            currentStep++
-        } else if (currentStep >= 2 && currentStep < 1 + totalDynamicQuestions) {
-            currentStep++
-        } else if (currentStep == 1 + totalDynamicQuestions) {
-            val payload = answers.toMutableMap()
-            onSave(payload)
+        when {
+            currentStep == 0 -> {
+                answers["API_KEY"] = apiKey.trim()
+                currentStep++
+            }
+
+            currentStep == 1 -> {
+                answers["Nickname"] = nickname.trim()
+                answers["Goal"] = goal.trim()
+                currentStep++
+            }
+
+            currentStep in 2..finalQuestionStep -> {
+                if (currentStep < finalQuestionStep) {
+                    currentStep++
+                } else {
+                    onSave(answers.toMap())
+                }
+            }
         }
     }
 
     LaunchedEffect(currentStep) {
-        val dynIndex = currentStep - 2
-        if (dynIndex in 0 until totalDynamicQuestions) {
-            if (dynIndex >= dynamicQuestions.size) {
-                // Fetch new question
-                isLoadingQuestion = true
-                try {
-                    val jsonStr = onFetchQuestion(answers, apiKey)
-                    val json = JSONObject(jsonStr)
-                    val qText = json.optString("question", "What else are you hiding?")
-                    val qType = json.optString("type", "text")
-                    val optsArray = json.optJSONArray("options")
-                    val opts = mutableListOf<String>()
-                    if (optsArray != null) {
-                        for (i in 0 until optsArray.length()) {
-                            opts.add(optsArray.optString(i))
+        val questionIndex = currentStep - 2
+        val aiIndex = questionIndex - staticQuestions.size
+        if (aiIndex in 0 until totalAiQuestions && aiIndex >= aiQuestions.size) {
+            isLoadingQuestion = true
+            try {
+                val context = answers.toMutableMap().apply {
+                    put("Nickname", nickname)
+                    put("Goal", goal)
+                }
+                val jsonStr = onFetchQuestion(context, apiKey)
+                val json = JSONObject(jsonStr)
+                val questionText = json.optString("question", "What else are you hiding?")
+                    .ifBlank { "What else are you hiding?" }
+                val typeText = json.optString("type", "text")
+                val options = buildList {
+                    val array = json.optJSONArray("options")
+                    if (array != null) {
+                        for (i in 0 until array.length()) {
+                            val option = array.optString(i).trim()
+                            if (option.isNotBlank()) add(option)
                         }
                     }
-                    val newQ = DynamicQuestion(
-                        id = "DynamicQ_$dynIndex",
-                        question = qText,
-                        type = qType,
-                        options = opts
-                    )
-                    dynamicQuestions.add(newQ)
-                    if (!answers.containsKey(newQ.question)) {
-                        answers[newQ.question] = ""
-                    }
-                } catch (e: Exception) {
-                    dynamicQuestions.add(
-                        DynamicQuestion(
-                            id = "DynamicQ_$dynIndex",
-                            question = "What is your deepest flaw?",
-                            type = "text",
-                            options = emptyList()
-                        )
-                    )
-                } finally {
-                    isLoadingQuestion = false
+                }.distinct().take(6)
+
+                val existingKeys = answers.keys + staticQuestions.map { it.key } + aiQuestions.map { it.key }
+                val key = if (questionText in existingKeys) {
+                    "$questionText (${aiIndex + 1})"
+                } else {
+                    questionText
                 }
+
+                val question = OnboardingQuestion(
+                    key = key,
+                    prompt = questionText,
+                    type = if (typeText.equals("dropdown", ignoreCase = true) && options.isNotEmpty()) {
+                        OnboardingQuestionType.DROPDOWN
+                    } else {
+                        OnboardingQuestionType.TEXT
+                    },
+                    options = options,
+                    inputLabel = if (options.isNotEmpty()) "Choose one" else "Your honest answer",
+                    singleLine = options.isNotEmpty()
+                )
+                aiQuestions.add(question)
+                if (!answers.containsKey(question.key)) {
+                    answers[question.key] = ""
+                }
+            } catch (_: Exception) {
+                val fallback = OnboardingQuestion(
+                    key = "Distraction pattern ${aiIndex + 1}",
+                    prompt = if (aiIndex == 0) {
+                        "When do you lose control of your phone the most?"
+                    } else {
+                        "What excuse do you repeat before wasting time?"
+                    },
+                    type = OnboardingQuestionType.TEXT,
+                    inputLabel = "Be honest",
+                    singleLine = false
+                )
+                aiQuestions.add(fallback)
+                if (!answers.containsKey(fallback.key)) {
+                    answers[fallback.key] = ""
+                }
+            } finally {
+                isLoadingQuestion = false
             }
         }
     }
@@ -109,9 +259,11 @@ fun OnboardingScreen(
             modifier = Modifier.fillMaxSize(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            // Progress indicator
-            val progress = (currentStep + 1) / (2f + totalDynamicQuestions)
-            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(targetValue = progress, label = "ProgressAnim")
+            val progress = (currentStep + 1) / (2f + totalQuestionSteps)
+            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+                targetValue = progress,
+                label = "ProgressAnim"
+            )
             Box(modifier = Modifier.fillMaxWidth().height(6.dp).background(CardSurface, RoundedCornerShape(3.dp))) {
                 Box(
                     modifier = Modifier
@@ -128,7 +280,6 @@ fun OnboardingScreen(
                 ) {
                     when {
                         step == 0 -> {
-                            // API Key Step
                             SectionHeader(title = "Welcome to Hell.", icon = Icons.Default.Key)
                             Text(
                                 "To destroy your laziness, we need an AI brain. Enter your Groq API Key.",
@@ -154,8 +305,8 @@ fun OnboardingScreen(
                                 enabled = apiKey.isNotBlank()
                             )
                         }
+
                         step == 1 -> {
-                            // Seed Step
                             SectionHeader(title = "Who are you?", icon = Icons.Default.Person)
                             Text(
                                 "Give us the basics before the AI drills into your soul.",
@@ -183,10 +334,10 @@ fun OnboardingScreen(
                                 enabled = nickname.isNotBlank() && goal.isNotBlank()
                             )
                         }
-                        step >= 2 && step < 2 + totalDynamicQuestions -> {
-                            // Dynamic Questions Step
-                            val dynIndex = step - 2
-                            if (isLoadingQuestion || dynIndex >= dynamicQuestions.size) {
+
+                        step >= 2 && step <= finalQuestionStep -> {
+                            val currentQ = currentQuestion(step)
+                            if (isLoadingQuestion || currentQ == null) {
                                 Column(
                                     modifier = Modifier.fillMaxSize(),
                                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -194,51 +345,47 @@ fun OnboardingScreen(
                                 ) {
                                     CircularProgressIndicator(color = BrutalRed, strokeWidth = 4.dp, modifier = Modifier.size(64.dp))
                                     Spacer(modifier = Modifier.height(24.dp))
-                                    Text("AI is analyzing your profile...", style = MaterialTheme.typography.titleMedium, color = BrutalRedLight, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = "AI is analyzing your profile...",
+                                        style = MaterialTheme.typography.titleMedium,
+                                        color = BrutalRedLight,
+                                        fontWeight = FontWeight.Bold
+                                    )
                                 }
                             } else {
-                                val currentQ = dynamicQuestions[dynIndex]
-                                SectionHeader(title = "Question ${dynIndex + 1}/$totalDynamicQuestions", icon = Icons.Default.Psychology)
+                                val questionIndex = step - 2
+                                SectionHeader(
+                                    title = "Question ${questionIndex + 1}/$totalQuestionSteps",
+                                    icon = Icons.Default.Psychology
+                                )
                                 Text(
-                                    currentQ.question,
+                                    currentQ.prompt,
                                     style = MaterialTheme.typography.headlineSmall,
                                     fontWeight = FontWeight.Bold,
                                     color = TextPrimary
                                 )
                                 BrutalCard(showAccent = false) {
-                                    if (currentQ.type == "dropdown" && currentQ.options.isNotEmpty()) {
-                                        // Dropdown/Radio simulation
-                                        currentQ.options.forEach { opt ->
-                                            val isSelected = answers[currentQ.question] == opt
-                                            Row(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .clickable { answers[currentQ.question] = opt }
-                                                    .padding(vertical = 12.dp),
-                                                verticalAlignment = Alignment.CenterVertically
-                                            ) {
-                                                RadioButton(
-                                                    selected = isSelected,
-                                                    onClick = { answers[currentQ.question] = opt },
-                                                    colors = RadioButtonDefaults.colors(selectedColor = BrutalRed)
-                                                )
-                                                Spacer(modifier = Modifier.width(12.dp))
-                                                Text(opt, color = if (isSelected) TextPrimary else TextSecondary)
-                                            }
-                                        }
-                                    } else {
-                                        BrutalTextField(
-                                            value = answers[currentQ.question] ?: "",
-                                            onValueChange = { answers[currentQ.question] = it },
-                                            label = "Your honest answer"
+                                    when (currentQ.type) {
+                                        OnboardingQuestionType.DROPDOWN -> BrutalDropdownField(
+                                            value = answers[currentQ.key].orEmpty(),
+                                            onValueChange = { answers[currentQ.key] = it },
+                                            label = currentQ.inputLabel,
+                                            options = currentQ.options
+                                        )
+
+                                        OnboardingQuestionType.TEXT -> BrutalTextField(
+                                            value = answers[currentQ.key].orEmpty(),
+                                            onValueChange = { answers[currentQ.key] = it },
+                                            label = currentQ.inputLabel,
+                                            singleLine = currentQ.singleLine
                                         )
                                     }
                                 }
                                 Spacer(modifier = Modifier.weight(1f))
                                 BrutalButton(
-                                    text = if (dynIndex == totalDynamicQuestions - 1) "FINALIZE PROFILE" else "NEXT →",
+                                    text = if (step == finalQuestionStep) "FINALIZE PROFILE" else "NEXT →",
                                     onClick = { proceedToNext() },
-                                    enabled = !answers[currentQ.question].isNullOrBlank()
+                                    enabled = !answers[currentQ.key].isNullOrBlank()
                                 )
                             }
                         }

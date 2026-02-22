@@ -17,16 +17,33 @@ class LocalRepository(
     private val applicationContext: Context
 ) {
     private var lastInterventionLine: String? = null
+    private val recentInterventionLines = ArrayDeque<String>()
+
+    private fun rememberInterventionLine(line: String) {
+        lastInterventionLine = line
+        recentInterventionLines.removeAll { it.equals(line, ignoreCase = true) }
+        recentInterventionLines.addLast(line)
+        while (recentInterventionLines.size > 5) {
+            recentInterventionLines.removeFirst()
+        }
+    }
 
     private fun pickFreshLine(candidates: List<String>): String {
-        val previous = lastInterventionLine
-        val filtered = if (previous.isNullOrBlank()) {
-            candidates
-        } else {
-            candidates.filterNot { it.equals(previous, ignoreCase = true) }
-        }
+        val recent = recentInterventionLines.map { it.lowercase(Locale.getDefault()) }.toSet()
+        val filtered = candidates.filterNot { it.lowercase(Locale.getDefault()) in recent }
         val pool = if (filtered.isEmpty()) candidates else filtered
         return pool.random()
+    }
+
+    private fun leverageValue(leverage: List<Pair<String, String>>, vararg keys: String): String {
+        for (key in keys) {
+            val value = leverage.firstOrNull { it.first.equals(key, ignoreCase = true) }
+                ?.second
+                .orEmpty()
+                .trim()
+            if (value.isNotBlank()) return value
+        }
+        return ""
     }
 
     private fun personalizedFallbackLines(
@@ -34,7 +51,10 @@ class LocalRepository(
         currentAppLabel: String,
         goal: String,
         insecurity: String,
-        fear: String
+        fear: String,
+        profession: String,
+        relationshipStatus: String,
+        gymStatus: String
     ): List<String> {
         val insecurityTail = if (insecurity.isBlank()) {
             ""
@@ -46,11 +66,29 @@ class LocalRepository(
         } else {
             " Yehi pace raha toh $fear sach ho jayega."
         }
+        val professionTail = if (profession.isBlank()) {
+            ""
+        } else {
+            " $profession hoke bhi discipline zero."
+        }
+        val relationshipTail = if (relationshipStatus.isBlank()) {
+            ""
+        } else {
+            " $relationshipStatus ho ya single, excuses sabko cheap lagte hain."
+        }
+        val gymTail = if (gymStatus.isBlank()) {
+            ""
+        } else {
+            " Gym status '$gymStatus' bolne se body aur confidence nahi banega."
+        }
 
         return listOf(
             "$nickname, $currentAppLabel phir se? $goal khud se complete nahi hoga.$fearTail",
             "$nickname, abhi $currentAppLabel band kar. Discipline ke bina $goal sirf fantasy hai.$insecurityTail",
-            "$nickname, tu live mode me apna future trade kar raha hai for $currentAppLabel. Back to $goal."
+            "$nickname, tu live mode me apna future trade kar raha hai for $currentAppLabel. Back to $goal.",
+            "$nickname, har swipe tera future salary aur respect ka cut hai.$professionTail",
+            "$nickname, focus tod ke tu apni image khud destroy kar raha hai.$relationshipTail",
+            "$nickname, $goal ka sapna bolta hai aur action me zero deta hai.$gymTail"
         )
     }
 
@@ -141,22 +179,29 @@ class LocalRepository(
 
     suspend fun generateInterventionLine(currentAppLabel: String): String {
         val profile = runCatching { database.profileDao().getProfile() }.getOrNull()
+        val leverage = profile?.leverageJson?.let { parseLeverageJson(it) } ?: emptyList()
         val nickname = profile?.nickname ?: "You"
         val goal = profile?.goal ?: "your goal"
         val insecurity = profile?.insecurity.orEmpty()
         val fear = profile?.fear.orEmpty()
+        val profession = profile?.profession.orEmpty()
+        val relationshipStatus = leverageValue(leverage, "Relationship status")
+        val gymStatus = leverageValue(leverage, "Gym status")
         val personalizedFallbacks = personalizedFallbackLines(
             nickname = nickname,
             currentAppLabel = currentAppLabel,
             goal = goal,
             insecurity = insecurity,
-            fear = fear
+            fear = fear,
+            profession = profession,
+            relationshipStatus = relationshipStatus,
+            gymStatus = gymStatus
         )
 
         val key = apiKeyFlow.first().trim()
         if (key.isBlank()) {
             val noKeyLine = pickFreshLine(personalizedFallbacks)
-            lastInterventionLine = noKeyLine
+            rememberInterventionLine(noKeyLine)
             return noKeyLine
         }
         if (!key.startsWith("gsk_")) {
@@ -164,33 +209,31 @@ class LocalRepository(
         }
 
         return try {
-            // --- RAG: gather all personal context ---
-            val leverage = profile?.leverageJson?.let { parseLeverageJson(it) } ?: emptyList()
-
-            // Recent semantic notes sorted by emotional weight (most painful first)
             val notes = database.semanticNotesDao().observeRecent().first()
                 .sortedByDescending { it.weight }
                 .take(5)
                 .joinToString("\n") { "- ${it.content} (weight ${it.weight}/10)" }
 
-            // Last daily check-in
             val today = LocalDate.now().toString()
             val checkin = database.dailyCheckinDao().getByDate(today)
             val checkinContext = if (checkin != null) {
                 "Today's plan: ${checkin.morningPlan}"
             } else ""
 
-            // Recent violations (last 5 blocked app events)
             val fmt = SimpleDateFormat("HH:mm", Locale.getDefault())
             val recentViolations = database.eventLogDao().observeRecent().first()
                 .take(5)
                 .joinToString(", ") { "${it.packageName.substringAfterLast('.')} at ${fmt.format(Date(it.atMillis))}" }
 
-            // Leverage (what's at stake)
             val leverageText = leverage
-                .take(3)
+                .take(5)
                 .joinToString("; ") { (k, v) -> "$k: $v" }
                 .let { if (it.isNotBlank()) "Stakes: $it" else "" }
+            val disappointed = leverageValue(leverage, "Who would be disappointed?")
+            val avoiding = leverageValue(leverage, "What are you avoiding?")
+            val exImpact = leverageValue(leverage, "Is an ex still affecting focus?")
+            val routine = leverageValue(leverage, "Current routine")
+            val environment = leverageValue(leverage, "College or office environment")
 
             val systemPrompt = """
                 You are the voice inside the user's phone whose only job is to shame them into keeping their promises.
@@ -206,7 +249,6 @@ class LocalRepository(
                 Keep each message 1-3 short sentences max. Make it sting instantly.
             """.trimIndent()
 
-            // --- RAG user context ---
             val userContext = buildString {
                 val attemptToken = System.currentTimeMillis().toString()
                 appendLine("Nickname: $nickname")
@@ -215,18 +257,17 @@ class LocalRepository(
                 appendLine("Time: $currentTime")
                 appendLine("Attempt token: $attemptToken")
                 appendLine("Today's goal they are breaking: $goal")
-                
+                if (profession.isNotBlank()) appendLine("Profession / current life stage: $profession")
                 if (checkinContext.isNotBlank()) appendLine("Yesterday's waste / Today's plan: $checkinContext")
                 if (insecurity.isNotBlank()) appendLine("Biggest insecurity: $insecurity")
                 if (fear.isNotBlank()) appendLine("Fear: $fear")
-                
-                // Map the leverage questions as close as possible to Boss, Salary, Ex
-                val disappointed = leverage.find { it.first == "Who would be disappointed?" }?.second
-                if (!disappointed.isNullOrBlank()) appendLine("Who would be disappointed: $disappointed")
-                
-                val avoiding = leverage.find { it.first == "What are you avoiding?" }?.second
-                if (!avoiding.isNullOrBlank()) appendLine("What they are avoiding: $avoiding")
-                
+                if (relationshipStatus.isNotBlank()) appendLine("Relationship status: $relationshipStatus")
+                if (exImpact.isNotBlank()) appendLine("Ex impact: $exImpact")
+                if (gymStatus.isNotBlank()) appendLine("Gym status: $gymStatus")
+                if (environment.isNotBlank()) appendLine("Main environment: $environment")
+                if (disappointed.isNotBlank()) appendLine("Who would be disappointed: $disappointed")
+                if (avoiding.isNotBlank()) appendLine("What they are avoiding: $avoiding")
+                if (routine.isNotBlank()) appendLine("Current routine: $routine")
                 if (leverageText.isNotBlank()) appendLine("Other stakes/leverage: $leverageText")
                 if (notes.isNotBlank()) {
                     appendLine("Past failures/things to hold against them:")
@@ -247,79 +288,81 @@ class LocalRepository(
                 userContext = userContext
             ).trim()
 
-            val finalLine = if (line.isBlank() || line.equals(lastInterventionLine, ignoreCase = true)) {
+            val finalLine = if (line.isBlank() || recentInterventionLines.any { it.equals(line, ignoreCase = true) }) {
                 pickFreshLine(personalizedFallbacks)
             } else {
                 line
             }
-            lastInterventionLine = finalLine
+            rememberInterventionLine(finalLine)
             finalLine
         } catch (e: Exception) {
             Log.e("LocalRepository", "Groq intervention generation failed", e)
             val finalFallback = pickFreshLine(personalizedFallbacks)
-            lastInterventionLine = finalFallback
+            rememberInterventionLine(finalFallback)
             finalFallback
-        }
-    }
-
-    suspend fun generateSpeech(text: String): ByteArray? {
-        val key = apiKeyFlow.first().trim()
-        if (key.isBlank() || !key.startsWith("gsk_")) return null
-
-        return try {
-            GroqClient().generateSpeech(apiKey = key, input = text)
-        } catch (e: Exception) {
-            Log.e("LocalRepository", "Groq TTS generation failed", e)
-            null
         }
     }
 
     suspend fun generateAiPartnerReply(userMessage: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
         try {
-        val cleanMessage = userMessage.trim()
-        if (cleanMessage.isBlank()) return@withContext "Type something first."
+            val cleanMessage = userMessage.trim()
+            if (cleanMessage.isBlank()) return@withContext "Type something first."
 
-        val profile = database.profileDao().getProfile()
-        val nickname = profile?.nickname ?: "friend"
-        val goal = profile?.goal ?: "your goal"
-        val insecurity = profile?.insecurity ?: ""
+            val profile = database.profileDao().getProfile()
+            val leverage = profile?.leverageJson?.let { parseLeverageJson(it) } ?: emptyList()
+            val nickname = profile?.nickname ?: "friend"
+            val goal = profile?.goal ?: "your goal"
+            val insecurity = profile?.insecurity.orEmpty()
+            val fear = profile?.fear.orEmpty()
+            val profession = profile?.profession.orEmpty()
+            val relationshipStatus = leverageValue(leverage, "Relationship status")
+            val avoiding = leverageValue(leverage, "What are you avoiding?")
+            val gymStatus = leverageValue(leverage, "Gym status")
 
-        val recentViolations = database.eventLogDao().observeRecent().first().take(5)
-        val violationContext = if (recentViolations.isEmpty()) {
-            "No recent violations recorded."
-        } else {
-            recentViolations.joinToString(", ") { it.packageName.substringAfterLast('.') }
-        }
+            val recentViolations = database.eventLogDao().observeRecent().first().take(6)
+            val violationContext = if (recentViolations.isEmpty()) {
+                "No recent violations recorded."
+            } else {
+                recentViolations.joinToString(", ") {
+                    "${it.packageName.substringAfterLast('.')} (${SimpleDateFormat("HH:mm", Locale.getDefault()).format(Date(it.atMillis))})"
+                }
+            }
 
-        val key = apiKeyFlow.first().trim()
-        if (key.isBlank() || !key.startsWith("gsk_")) {
-            return@withContext "I’m here, $nickname. No API key set yet—save a valid Groq key to enable AI partner replies."
-        }
+            val key = apiKeyFlow.first().trim()
+            if (key.isBlank() || !key.startsWith("gsk_")) {
+                return@withContext "I’m here, $nickname. No API key set yet—save a valid Groq key to enable AI partner replies."
+            }
 
-        return@withContext try {
-            val systemPrompt = """
-                You are a direct but supportive accountability AI partner.
-                Keep reply to 2-4 lines max.
-                Use practical steps, not fluff.
-                Use light Hinglish if natural.
-                Be strict, respectful, and action-oriented.
-                Never suggest self-harm or abuse.
-            """.trimIndent()
+            return@withContext try {
+                val systemPrompt = """
+                    You are a direct but supportive accountability AI partner.
+                    Keep reply to 2-4 lines max.
+                    Use practical steps, not fluff.
+                    Use light Hinglish if natural.
+                    Be strict, respectful, and action-oriented.
+                    Personalize using profile facts when available.
+                    Never suggest self-harm or abuse.
+                """.trimIndent()
 
-            val context = """
-                User nickname: $nickname
-                Main goal: $goal
-                Insecurity: $insecurity
-                Recent restricted-app violations: $violationContext
-                User message: $cleanMessage
-            """.trimIndent()
+                val context = buildString {
+                    appendLine("User nickname: $nickname")
+                    appendLine("Main goal: $goal")
+                    if (profession.isNotBlank()) appendLine("Current stage: $profession")
+                    if (insecurity.isNotBlank()) appendLine("Insecurity: $insecurity")
+                    if (fear.isNotBlank()) appendLine("Fear: $fear")
+                    if (relationshipStatus.isNotBlank()) appendLine("Relationship status: $relationshipStatus")
+                    if (gymStatus.isNotBlank()) appendLine("Gym status: $gymStatus")
+                    if (avoiding.isNotBlank()) appendLine("Avoiding: $avoiding")
+                    appendLine("Recent restricted-app violations: $violationContext")
+                    appendLine("User message: $cleanMessage")
+                }
 
-            GroqClient().generateLine(key, systemPrompt, context)
-                .ifBlank { "$nickname, next step: put phone down for 10 minutes and start one task toward $goal." }
-        } catch (e: Exception) {
-            Log.e("LocalRepository", "AI partner generation failed", e)
-            "$nickname, quick reset: 1) close distractions, 2) 10-minute timer, 3) start the first task toward $goal."
-        }
+                GroqClient().generateLine(key, systemPrompt, context)
+                    .ifBlank { "$nickname, next step: put phone down for 10 minutes and start one task toward $goal." }
+            } catch (e: Exception) {
+                Log.e("LocalRepository", "AI partner generation failed", e)
+                "$nickname, quick reset: 1) close distractions, 2) 10-minute timer, 3) start the first task toward $goal."
+            }
         } catch (e: Exception) {
             Log.e("LocalRepository", "AI partner fatal failure", e)
             "Quick reset: close distractions, 10-minute timer, start first task now."
@@ -416,41 +459,101 @@ class LocalRepository(
         val key = tempApiKey.ifBlank { apiKeyFlow.first() }.trim()
 
         fun localFallbackQuestion(): String {
-            val question = when {
-                !contextMap["Goal"].isNullOrBlank() && contextMap["What are you avoiding?"].isNullOrBlank() -> "What are you avoiding right now?"
-                !contextMap["Nickname"].isNullOrBlank() && contextMap["Who would be disappointed?"].isNullOrBlank() -> "Who feels your broken promises first?"
-                else -> "What is your deepest flaw?"
-            }
+            data class FallbackQuestion(
+                val key: String,
+                val question: String,
+                val options: List<String> = emptyList()
+            )
+            val orderedFallbacks = listOf(
+                FallbackQuestion(
+                    key = "Relationship status",
+                    question = "What is your relationship situation?",
+                    options = listOf("Single", "In a relationship", "Complicated", "Recently broke up")
+                ),
+                FallbackQuestion(
+                    key = "Is an ex still affecting focus?",
+                    question = "Is an ex still affecting your focus?",
+                    options = listOf("Yes", "Sometimes", "No")
+                ),
+                FallbackQuestion(
+                    key = "College or office environment",
+                    question = "Where do distractions hit you harder?",
+                    options = listOf("College", "Office", "Home", "Everywhere")
+                ),
+                FallbackQuestion(
+                    key = "Gym status",
+                    question = "What's your current gym/fitness status?",
+                    options = listOf("Regular", "Inconsistent", "Want to start", "Not focused on fitness")
+                ),
+                FallbackQuestion(
+                    key = "Who would be disappointed?",
+                    question = "Who gets hurt first when you stay distracted?"
+                ),
+                FallbackQuestion(
+                    key = "What are you avoiding?",
+                    question = "What difficult task are you avoiding daily?"
+                )
+            )
+            val nextQuestion = orderedFallbacks.firstOrNull { contextMap[it.key].isNullOrBlank() }
+                ?: FallbackQuestion(
+                    key = "Pain point",
+                    question = "What excuse do you repeat before wasting time?"
+                )
+            val type = if (nextQuestion.options.isEmpty()) "text" else "dropdown"
+            val options = JSONArray(nextQuestion.options)
             return JSONObject()
-                .put("question", question)
-                .put("type", "text")
-                .put("options", JSONArray())
+                .put("question", nextQuestion.question)
+                .put("type", type)
+                .put("options", options)
                 .toString()
         }
 
         if (key.isBlank() || !key.startsWith("gsk_")) return@withContext localFallbackQuestion()
-        
+
         try {
             val systemPrompt = """
-                You are a toxic accountability AI profiling a new user to find their deepest insecurities, fears, and leverage points.
-                Based on the context so far, generate ONE highly probing question to ask them next.
-                Output ONLY a valid JSON object with this exact structure:
+                You are profiling a user for accountability and need one deeper follow-up question.
+                Generate ONE question that is not already answered in the provided context map.
+                Prioritize missing details around relationship pressure, ex impact, college/office pressure, gym discipline, fear, shame, and specific avoided tasks.
+                Output ONLY valid JSON with this exact structure:
                 {
-                  "question": "The question text, max 10 words",
+                  "question": "Question text max 12 words",
                   "type": "text",
                   "options": []
                 }
-                If you want to give them choices, set "type": "dropdown" and provide 2-4 strings in "options".
-                Make it invasive. Dig deeper into their failures.
+                If choices make sense, set "type" to "dropdown" and provide 3-5 concise strings in "options".
+                Do not add markdown, quotes outside JSON, or any explanation.
             """.trimIndent()
 
             val contextStr = contextMap.entries.joinToString("\n") { "${it.key}: ${it.value}" }
-            
             val rawJson = GroqClient().generateLine(key, systemPrompt, "Context so far:\n$contextStr")
-            val cleanJson = rawJson.substringAfter("{").substringBeforeLast("}")
+            val cleanJson = rawJson.substringAfter("{", "").substringBeforeLast("}", "")
+            if (cleanJson.isBlank()) return@withContext localFallbackQuestion()
             "{$cleanJson}"
         } catch (_: Exception) {
             localFallbackQuestion()
+        }
+    }
+
+    private fun shouldWarnForModelTerms(error: Throwable): Boolean {
+        return error.message?.contains("model_terms_required", ignoreCase = true) == true
+    }
+
+    suspend fun generateSpeech(text: String): ByteArray? {
+        val key = apiKeyFlow.first().trim()
+        if (key.isBlank() || !key.startsWith("gsk_")) return null
+
+        return try {
+            GroqClient().generateSpeech(apiKey = key, input = text)
+        } catch (e: Exception) {
+            if (shouldWarnForModelTerms(e)) {
+                Log.w(
+                    "LocalRepository",
+                    "Groq TTS model terms not accepted. Accept terms in Groq console for voice model."
+                )
+            }
+            Log.e("LocalRepository", "Groq TTS generation failed", e)
+            null
         }
     }
 }

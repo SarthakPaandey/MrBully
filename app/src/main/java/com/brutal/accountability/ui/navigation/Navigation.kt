@@ -222,7 +222,12 @@ fun NavGraph(repository: LocalRepository) {
                 HomeScreen(
                     recentEvents = recentEvents,
                     onGenerateRoast = {
-                        repository.generateInterventionLine("your distraction apps")
+                        val latestOffender = recentEvents.firstOrNull()
+                            ?.packageName
+                            ?.substringAfterLast('.')
+                            ?.replaceFirstChar { if (it.isLowerCase()) it.titlecase() else it.toString() }
+                            ?: "your distraction app"
+                        repository.generateInterventionLine(latestOffender)
                     }
                 )
             }
