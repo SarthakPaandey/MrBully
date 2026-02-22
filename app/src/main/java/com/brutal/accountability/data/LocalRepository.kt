@@ -18,6 +18,42 @@ class LocalRepository(
 ) {
     private var lastInterventionLine: String? = null
 
+    private fun pickFreshLine(candidates: List<String>): String {
+        val previous = lastInterventionLine
+        val filtered = if (previous.isNullOrBlank()) {
+            candidates
+        } else {
+            candidates.filterNot { it.equals(previous, ignoreCase = true) }
+        }
+        val pool = if (filtered.isEmpty()) candidates else filtered
+        return pool.random()
+    }
+
+    private fun personalizedFallbackLines(
+        nickname: String,
+        currentAppLabel: String,
+        goal: String,
+        insecurity: String,
+        fear: String
+    ): List<String> {
+        val insecurityTail = if (insecurity.isBlank()) {
+            ""
+        } else {
+            " Aur haan, $insecurity abhi bhi fix nahi hua."
+        }
+        val fearTail = if (fear.isBlank()) {
+            ""
+        } else {
+            " Yehi pace raha toh $fear sach ho jayega."
+        }
+
+        return listOf(
+            "$nickname, $currentAppLabel phir se? $goal khud se complete nahi hoga.$fearTail",
+            "$nickname, abhi $currentAppLabel band kar. Discipline ke bina $goal sirf fantasy hai.$insecurityTail",
+            "$nickname, tu live mode me apna future trade kar raha hai for $currentAppLabel. Back to $goal."
+        )
+    }
+
     val profileFlow: Flow<UserProfileEntity?> = database.profileDao().observeProfile()
     val restrictedAppsFlow: Flow<List<RestrictedAppEntity>> = database.restrictedAppsDao().observeAll()
     val recentEventsFlow: Flow<List<EventLogEntity>> = database.eventLogDao().observeRecent()
@@ -104,13 +140,24 @@ class LocalRepository(
     suspend fun getCurrentPhrase(): String = phraseFlow.first()
 
     suspend fun generateInterventionLine(currentAppLabel: String): String {
-        val profile = database.profileDao().getProfile()
+        val profile = runCatching { database.profileDao().getProfile() }.getOrNull()
         val nickname = profile?.nickname ?: "You"
         val goal = profile?.goal ?: "your goal"
+        val insecurity = profile?.insecurity.orEmpty()
+        val fear = profile?.fear.orEmpty()
+        val personalizedFallbacks = personalizedFallbackLines(
+            nickname = nickname,
+            currentAppLabel = currentAppLabel,
+            goal = goal,
+            insecurity = insecurity,
+            fear = fear
+        )
 
         val key = apiKeyFlow.first().trim()
         if (key.isBlank()) {
-            return "$nickname — put down $currentAppLabel. $goal is waiting."
+            val noKeyLine = pickFreshLine(personalizedFallbacks)
+            lastInterventionLine = noKeyLine
+            return noKeyLine
         }
         if (!key.startsWith("gsk_")) {
             return "$nickname, this does not look like a Groq key. Save a valid gsk_ key."
@@ -118,9 +165,6 @@ class LocalRepository(
 
         return try {
             // --- RAG: gather all personal context ---
-            val profession = profile?.profession ?: ""
-            val insecurity = profile?.insecurity ?: ""
-            val fear = profile?.fear ?: ""
             val leverage = profile?.leverageJson?.let { parseLeverageJson(it) } ?: emptyList()
 
             // Recent semantic notes sorted by emotional weight (most painful first)
@@ -203,13 +247,8 @@ class LocalRepository(
                 userContext = userContext
             ).trim()
 
-            val finalLine = if (line.equals(lastInterventionLine, ignoreCase = true)) {
-                val fallbackVariants = listOf(
-                    "$nickname, stop looping the same mistake. New rule: no $currentAppLabel till work is done.",
-                    "$nickname, same pattern again. Close $currentAppLabel and earn your respect back.",
-                    "$nickname, you're repeating failure in real time. $currentAppLabel closes now."
-                )
-                fallbackVariants[(System.currentTimeMillis() % fallbackVariants.size).toInt()]
+            val finalLine = if (line.isBlank() || line.equals(lastInterventionLine, ignoreCase = true)) {
+                pickFreshLine(personalizedFallbacks)
             } else {
                 line
             }
@@ -217,13 +256,9 @@ class LocalRepository(
             finalLine
         } catch (e: Exception) {
             Log.e("LocalRepository", "Groq intervention generation failed", e)
-            val fallbackLines = listOf(
-                "$currentAppLabel is stealing your future while you watch.",
-                "$currentAppLabel again? You're choosing easy over your own goal.",
-                "This is exactly how people stay average for years.",
-                "One more scroll, one less step toward $goal."
-            )
-            "$nickname, ${fallbackLines.random()}"
+            val finalFallback = pickFreshLine(personalizedFallbacks)
+            lastInterventionLine = finalFallback
+            finalFallback
         }
     }
 
@@ -240,6 +275,7 @@ class LocalRepository(
     }
 
     suspend fun generateAiPartnerReply(userMessage: String): String = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+        try {
         val cleanMessage = userMessage.trim()
         if (cleanMessage.isBlank()) return@withContext "Type something first."
 
@@ -283,6 +319,10 @@ class LocalRepository(
         } catch (e: Exception) {
             Log.e("LocalRepository", "AI partner generation failed", e)
             "$nickname, quick reset: 1) close distractions, 2) 10-minute timer, 3) start the first task toward $goal."
+        }
+        } catch (e: Exception) {
+            Log.e("LocalRepository", "AI partner fatal failure", e)
+            "Quick reset: close distractions, 10-minute timer, start first task now."
         }
     }
 

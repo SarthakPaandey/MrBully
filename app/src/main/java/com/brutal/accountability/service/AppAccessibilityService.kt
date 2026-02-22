@@ -3,24 +3,27 @@ package com.brutal.accountability.service
 import android.accessibilityservice.AccessibilityService
 import android.Manifest
 import android.content.pm.PackageManager
+import android.os.Build
+import android.os.SystemClock
+import android.view.accessibility.AccessibilityEvent
+import android.media.MediaPlayer
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
-import android.os.SystemClock
-import android.view.accessibility.AccessibilityEvent
 import com.brutal.accountability.BrutalApp
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import android.media.MediaPlayer
 import java.io.File
 import java.io.FileOutputStream
 
 class AppAccessibilityService : AccessibilityService() {
 
     private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
-    private var lastTriggerAt = 0L
+    private val lastTriggerByPackage = mutableMapOf<String, Long>()
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         val pkg = event?.packageName?.toString() ?: return
@@ -29,6 +32,7 @@ class AppAccessibilityService : AccessibilityService() {
         val app = application as BrutalApp
         val repository = app.repository
         val now = SystemClock.elapsedRealtime()
+        val lastTriggerAt = lastTriggerByPackage[pkg] ?: 0L
         if (now - lastTriggerAt < 2500L) return
 
         scope.launch {
@@ -42,7 +46,7 @@ class AppAccessibilityService : AccessibilityService() {
             val strict = triggerEngine.strictModeEnabled()
             if (!strict) return@launch
 
-            lastTriggerAt = SystemClock.elapsedRealtime()
+            lastTriggerByPackage[pkg] = SystemClock.elapsedRealtime()
             
             val label = pkg.substringAfterLast('.')
             val message = repository.generateInterventionLine(label)
@@ -71,11 +75,11 @@ class AppAccessibilityService : AccessibilityService() {
                 }
             }
 
-            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                val channel = android.app.NotificationChannel(
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                val channel = NotificationChannel(
                     "intervention_channel",
                     "Brutal Interventions",
-                    android.app.NotificationManager.IMPORTANCE_HIGH
+                    NotificationManager.IMPORTANCE_HIGH
                 )
                 notificationManager.createNotificationChannel(channel)
             }
@@ -90,12 +94,9 @@ class AppAccessibilityService : AccessibilityService() {
                 .setVibrate(longArrayOf(0, 500, 200, 500))
                 .build()
 
-            if (ContextCompat.checkSelfPermission(
-                    this@AppAccessibilityService,
-                    Manifest.permission.POST_NOTIFICATIONS
-                ) == PackageManager.PERMISSION_GRANTED
-            ) {
-                notificationManager.notify(pkg.hashCode(), notification)
+            if (canPostNotifications(notificationManager)) {
+                val id = (SystemClock.uptimeMillis() and 0x0FFFFFFF).toInt()
+                notificationManager.notify(id, notification)
             }
 
             repository.insertEpisodic(
@@ -106,4 +107,13 @@ class AppAccessibilityService : AccessibilityService() {
     }
 
     override fun onInterrupt() = Unit
+
+    private fun canPostNotifications(notificationManager: NotificationManagerCompat): Boolean {
+        if (!notificationManager.areNotificationsEnabled()) return false
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
+        return ContextCompat.checkSelfPermission(
+            this,
+            Manifest.permission.POST_NOTIFICATIONS
+        ) == PackageManager.PERMISSION_GRANTED
+    }
 }

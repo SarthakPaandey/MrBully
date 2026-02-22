@@ -42,8 +42,11 @@ fun SettingsScreen(
     strictMode: Boolean,
     savedApiKey: String,
     isAccessibilityEnabled: Boolean,
+    isNotificationEnabled: Boolean,
     onToggleStrictMode: (Boolean) -> Unit,
     onOpenAccessibilitySettings: () -> Unit,
+    onOpenNotificationSettings: () -> Unit,
+    onOpenRestrictedApps: () -> Unit,
     onSavePhrase: (String) -> Unit,
     onSaveDaily: (String, String) -> Unit,
     onRememberNote: (String) -> Unit,
@@ -98,9 +101,27 @@ fun SettingsScreen(
                             "Enable accessibility service to detect restricted app launches.",
                             style = MaterialTheme.typography.bodyMedium
                         )
+                        val notificationStatusColor = if (isNotificationEnabled) StatusGreen else BrutalRed
+                        val notificationStatusText = if (isNotificationEnabled) "Notifications are ON" else "Notifications are OFF"
+                        Text(
+                            text = notificationStatusText,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = notificationStatusColor,
+                            fontWeight = FontWeight.Bold
+                        )
                         BrutalButton(
                             text = "OPEN ACCESSIBILITY SETTINGS",
                             onClick = onOpenAccessibilitySettings
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BrutalButton(
+                            text = "OPEN NOTIFICATION SETTINGS",
+                            onClick = onOpenNotificationSettings
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        BrutalButton(
+                            text = "MANAGE RESTRICTED APPS",
+                            onClick = onOpenRestrictedApps
                         )
                         Row(
                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),

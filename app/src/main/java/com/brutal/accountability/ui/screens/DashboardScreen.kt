@@ -30,6 +30,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.font.FontWeight
+import android.util.Log
 import com.brutal.accountability.data.EventLogEntity
 import com.brutal.accountability.ui.components.AnimatedScreen
 import com.brutal.accountability.ui.components.BrutalButton
@@ -288,8 +289,14 @@ fun DashboardScreen(
                             onClick = {
                                 scope.launch {
                                     isPartnerLoading = true
-                                    partnerReply = onAskAiPartner(partnerInput)
-                                    isPartnerLoading = false
+                                    try {
+                                        partnerReply = onAskAiPartner(partnerInput)
+                                    } catch (e: Exception) {
+                                        Log.e("DashboardScreen", "AI partner request failed", e)
+                                        partnerReply = "Couldn’t fetch reply right now. Try again in a moment."
+                                    } finally {
+                                        isPartnerLoading = false
+                                    }
                                 }
                             },
                             enabled = partnerInput.isNotBlank() && !isPartnerLoading

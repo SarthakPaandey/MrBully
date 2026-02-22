@@ -33,6 +33,7 @@ import com.brutal.accountability.ui.theme.CardSurface
 import com.brutal.accountability.ui.theme.TextMuted
 import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
+import android.util.Log
 import kotlinx.coroutines.launch
 
 private data class ChatMessage(val text: String, val isUser: Boolean)
@@ -109,9 +110,15 @@ fun ChatScreen(
                             messages.add(ChatMessage(prompt, true))
                             scope.launch {
                                 isLoading = true
-                                val reply = onAskAiPartner(prompt)
-                                messages.add(ChatMessage(reply, false))
-                                isLoading = false
+                                try {
+                                    val reply = onAskAiPartner(prompt)
+                                    messages.add(ChatMessage(reply, false))
+                                } catch (e: Exception) {
+                                    Log.e("ChatScreen", "AI partner request failed", e)
+                                    messages.add(ChatMessage("Couldn’t fetch reply right now. Try again in a moment.", false))
+                                } finally {
+                                    isLoading = false
+                                }
                             }
                         }
                     )

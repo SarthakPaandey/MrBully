@@ -1,7 +1,9 @@
 package com.brutal.accountability.ui.navigation
 
 import android.content.Intent
+import android.content.ComponentName
 import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
 import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
@@ -236,12 +238,11 @@ fun NavGraph(repository: LocalRepository) {
             composable(Routes.SETTINGS) {
                 val lifecycleOwner = LocalLifecycleOwner.current
                 var isAccessibilityEnabled by remember { mutableStateOf(false) }
+                var isNotificationEnabled by remember { mutableStateOf(false) }
 
                 fun refreshAccessibilityStatus() {
-                    val am = context.getSystemService(android.content.Context.ACCESSIBILITY_SERVICE) as android.view.accessibility.AccessibilityManager
-                    isAccessibilityEnabled = am.getEnabledAccessibilityServiceList(android.accessibilityservice.AccessibilityServiceInfo.FEEDBACK_GENERIC).any {
-                        it.resolveInfo.serviceInfo.packageName == context.packageName
-                    }
+                    isAccessibilityEnabled = isAccessibilityServiceEnabled(context)
+                    isNotificationEnabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
                 }
 
                 androidx.compose.runtime.LaunchedEffect(Unit) {
@@ -264,6 +265,7 @@ fun NavGraph(repository: LocalRepository) {
                     strictMode = strictMode,
                     savedApiKey = apiKey,
                     isAccessibilityEnabled = isAccessibilityEnabled,
+                    isNotificationEnabled = isNotificationEnabled,
                     onToggleStrictMode = { enabled ->
                         scope.launch(Dispatchers.IO) { repository.setStrictMode(enabled) }
                     },
@@ -271,6 +273,16 @@ fun NavGraph(repository: LocalRepository) {
                         val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
                         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                         context.startActivity(intent)
+                    },
+                    onOpenNotificationSettings = {
+                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                        }
+                        context.startActivity(intent)
+                    },
+                    onOpenRestrictedApps = {
+                        navController.navigate(Routes.APPS)
                     },
                     onSavePhrase = { phrase ->
                         scope.launch(Dispatchers.IO) { repository.setPhrase(phrase) }
@@ -288,4 +300,19 @@ fun NavGraph(repository: LocalRepository) {
             }
         }
     }
+}
+
+private fun isAccessibilityServiceEnabled(context: android.content.Context): Boolean {
+    val expected = ComponentName(
+        context,
+        com.brutal.accountability.service.AppAccessibilityService::class.java
+    ).flattenToString()
+
+    val enabledServices = Settings.Secure.getString(
+        context.contentResolver,
+        Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+    ).orEmpty()
+
+    if (enabledServices.isBlank()) return false
+    return enabledServices.split(':').any { it.equals(expected, ignoreCase = true) }
 }
