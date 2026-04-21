@@ -22,6 +22,55 @@ A **brutal Android accountability app** that uses AI interventions and strict ph
 | OkHttp | LLM API calls |
 | OpenAI API | AI intervention messages (optional) |
 
+## 🏗️ Architecture
+
+```mermaid
+flowchart TB
+    user([User]) --> ui
+
+    subgraph app["Android App"]
+        direction TB
+        ui["UI Layer (Jetpack Compose)<br/>Onboarding • Apps • Home • Chat • Settings"]
+        nav["Navigation (NavGraph)"]
+        repo["LocalRepository<br/>(single app data gateway)"]
+        ui --> nav --> repo
+    end
+
+    subgraph platform["Android Platform Services"]
+        direction TB
+        acc["AppAccessibilityService<br/>(foreground app monitoring + interventions)"]
+        work["WorkManager + DailyCheckInWorker<br/>(scheduled reminders)"]
+        boot["BootReceiver<br/>(re-schedules work on reboot)"]
+        notif["NotificationManager"]
+        audio["MediaPlayer / Device TTS"]
+    end
+
+    subgraph storage["Local Storage"]
+        direction TB
+        room[("Room Database<br/>Profile • Restricted Apps • Events • Memories")]
+        prefs[("DataStore Preferences<br/>Strict Mode • Phrase • Encrypted API Key")]
+    end
+
+    subgraph ai["AI Layer (Optional)"]
+        direction TB
+        groq["GroqClient (OkHttp)"]
+        api[("Groq / OpenAI-Compatible API")]
+        groq --> api
+    end
+
+    repo --> room
+    repo --> prefs
+    repo --> groq
+
+    acc --> repo
+    acc --> notif
+    acc --> audio
+
+    work --> repo
+    work --> notif
+    boot --> work
+```
+
 ## 🚀 Getting Started
 
 1. Open this folder in **Android Studio**
