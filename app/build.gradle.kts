@@ -37,7 +37,7 @@ android {
         }
 
         buildConfigField("String", "GROQ_BASE_URL", "\"https://api.groq.com/openai/v1/\"")
-        buildConfigField("String", "GROQ_MODEL", "\"llama-3.3-70b-versatile\"")
+        buildConfigField("String", "GROQ_MODEL", "\"openai/gpt-oss-120b\"")
         buildConfigField("String", "GROQ_API_KEY", "\"$groqApiKeyFromBuildInput\"")
     }
 

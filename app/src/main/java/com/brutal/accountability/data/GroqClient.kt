@@ -19,8 +19,7 @@ class GroqClient {
         const val BASE_URL = "https://api.groq.com/openai/v1/chat/completions"
         private val CHAT_MODELS = listOf(
             "openai/gpt-oss-120b",
-            "openai/gpt-oss-20b",
-            "llama-3.3-70b-versatile"
+            "openai/gpt-oss-20b"
         )
         const val TTS_URL = "https://api.groq.com/openai/v1/audio/speech"
         const val TTS_MODEL = "canopylabs/orpheus-v1-english"
@@ -41,6 +40,7 @@ class GroqClient {
                     .put("messages", messages)
                     .put("max_tokens", 120)
                     .put("temperature", 0.9)
+                    .put("reasoning_effort", "low")
                     .toString()
                     .toRequestBody(jsonType)
 
