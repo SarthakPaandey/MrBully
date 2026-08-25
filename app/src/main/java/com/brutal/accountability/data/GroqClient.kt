@@ -81,9 +81,9 @@ class GroqClient {
         return runCatching { requestSpeech(apiKey = apiKey, input = input, voice = TTS_VOICE_PRIMARY) }
             .recoverCatching { requestSpeech(apiKey = apiKey, input = input, voice = TTS_VOICE_SECONDARY) }
             .getOrThrow()
-        }
+    }
 
-        private fun requestSpeech(apiKey: String, input: String, voice: String): ByteArray {
+    private fun requestSpeech(apiKey: String, input: String, voice: String): ByteArray {
         val body = JSONObject()
             .put("model", TTS_MODEL)
             .put("input", input)

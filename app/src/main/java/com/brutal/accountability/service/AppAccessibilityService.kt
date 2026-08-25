@@ -2,8 +2,6 @@ package com.brutal.accountability.service
 
 import android.accessibilityservice.AccessibilityService
 import android.Manifest
-import android.app.NotificationChannel
-import android.app.NotificationManager
 import android.content.pm.PackageManager
 import android.media.MediaPlayer
 import android.os.Build
@@ -50,14 +48,18 @@ class AppAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListe
 
     override fun onAccessibilityEvent(event: AccessibilityEvent?) {
         if (event?.eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) return
-        val pkg = event?.packageName?.toString() ?: return
+        val pkg = event.packageName?.toString() ?: return
         if (pkg == packageName) return
+
+        val now = SystemClock.elapsedRealtime()
+        synchronized(lastTriggerByPackage) {
+            val lastTriggerAt = lastTriggerByPackage[pkg] ?: 0L
+            if (now - lastTriggerAt < TRIGGER_DEBOUNCE_MILLIS) return
+            lastTriggerByPackage[pkg] = now
+        }
 
         val app = application as BrutalApp
         val repository = app.repository
-        val now = SystemClock.elapsedRealtime()
-        val lastTriggerAt = lastTriggerByPackage[pkg] ?: 0L
-        if (now - lastTriggerAt < 10000L) return
 
         scope.launch {
             val restricted = repository.getRestrictedPackageNames()
@@ -70,7 +72,6 @@ class AppAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListe
             val strict = triggerEngine.strictModeEnabled()
             if (!strict) return@launch
 
-            lastTriggerByPackage[pkg] = SystemClock.elapsedRealtime()
             val label = runCatching {
                 packageManager.getApplicationLabel(
                     packageManager.getApplicationInfo(pkg, 0)
@@ -82,8 +83,6 @@ class AppAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListe
                 (SystemClock.elapsedRealtime() - lastNotificationAt) < 45000L
             if (sameRecentNotification) return@launch
 
-            val notificationManager = NotificationManagerCompat.from(this@AppAccessibilityService)
-
             scope.launch {
                 try {
                     val audioBytes = repository.generateSpeech(message)
@@ -93,16 +92,8 @@ class AppAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListe
                 }
             }
 
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                val channel = NotificationChannel(
-                    "intervention_channel",
-                    "Brutal Interventions",
-                    NotificationManager.IMPORTANCE_HIGH
-                )
-                notificationManager.createNotificationChannel(channel)
-            }
-
-            val notification = NotificationCompat.Builder(this@AppAccessibilityService, "intervention_channel")
+            val notificationManager = NotificationManagerCompat.from(this@AppAccessibilityService)
+            val notification = NotificationCompat.Builder(this@AppAccessibilityService, INTERVENTION_CHANNEL_ID)
                 .setSmallIcon(android.R.drawable.ic_dialog_alert)
                 .setContentTitle("BRUTAL INTERVENTION")
                 .setContentText(message)
@@ -198,5 +189,10 @@ class AppAccessibilityService : AccessibilityService(), TextToSpeech.OnInitListe
         runCatching { mediaPlayer?.stop() }
         runCatching { mediaPlayer?.release() }
         mediaPlayer = null
+    }
+
+    companion object {
+        const val INTERVENTION_CHANNEL_ID = "intervention_channel"
+        private const val TRIGGER_DEBOUNCE_MILLIS = 10_000L
     }
 }

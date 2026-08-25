@@ -8,12 +8,14 @@ import androidx.compose.animation.AnimatedContentTransitionScope
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -25,11 +27,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -52,6 +56,7 @@ import com.brutal.accountability.ui.theme.BrutalRed
 import com.brutal.accountability.ui.theme.DeepBlack
 import com.brutal.accountability.ui.theme.TextSecondary
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 
 object Routes {
@@ -78,6 +83,12 @@ fun NavGraph(repository: LocalRepository) {
     val strictMode by repository.strictModeFlow.collectAsStateWithLifecycle(initialValue = true)
     val apiKey by repository.apiKeyFlow.collectAsStateWithLifecycle(initialValue = "")
     val scope = rememberCoroutineScope()
+
+    var profileLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        repository.profileFlow.first()
+        profileLoaded = true
+    }
 
     val navController = rememberNavController()
     val currentBackStack by navController.currentBackStackEntryAsState()
@@ -146,6 +157,17 @@ fun NavGraph(repository: LocalRepository) {
             }
         }
     ) { innerPadding ->
+        if (!profileLoaded) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                contentAlignment = Alignment.Center
+            ) {
+                CircularProgressIndicator(color = BrutalRed)
+            }
+            return@Scaffold
+        }
         NavHost(
             navController = navController,
             startDestination = startDestination,

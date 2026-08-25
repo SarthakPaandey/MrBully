@@ -16,6 +16,7 @@ class LocalRepository(
     private val prefs: AppPrefs,
     private val applicationContext: Context
 ) {
+    private val groqClient = GroqClient()
     private var lastInterventionLine: String? = null
     private val recentInterventionLines = ArrayDeque<String>()
 
@@ -23,16 +24,9 @@ class LocalRepository(
         lastInterventionLine = line
         recentInterventionLines.removeAll { it.equals(line, ignoreCase = true) }
         recentInterventionLines.addLast(line)
-        while (recentInterventionLines.size > 5) {
+        while (recentInterventionLines.size > MAX_REMEMBERED_LINES) {
             recentInterventionLines.removeFirst()
         }
-    }
-
-    private fun pickFreshLine(candidates: List<String>): String {
-        val recent = recentInterventionLines.map { it.lowercase(Locale.getDefault()) }.toSet()
-        val filtered = candidates.filterNot { it.lowercase(Locale.getDefault()) in recent }
-        val pool = if (filtered.isEmpty()) candidates else filtered
-        return pool.random()
     }
 
     private fun leverageValue(leverage: List<Pair<String, String>>, vararg keys: String): String {
@@ -44,52 +38,6 @@ class LocalRepository(
             if (value.isNotBlank()) return value
         }
         return ""
-    }
-
-    private fun personalizedFallbackLines(
-        nickname: String,
-        currentAppLabel: String,
-        goal: String,
-        insecurity: String,
-        fear: String,
-        profession: String,
-        relationshipStatus: String,
-        gymStatus: String
-    ): List<String> {
-        val insecurityTail = if (insecurity.isBlank()) {
-            ""
-        } else {
-            " Aur haan, $insecurity abhi bhi fix nahi hua."
-        }
-        val fearTail = if (fear.isBlank()) {
-            ""
-        } else {
-            " Yehi pace raha toh $fear sach ho jayega."
-        }
-        val professionTail = if (profession.isBlank()) {
-            ""
-        } else {
-            " $profession hoke bhi discipline zero."
-        }
-        val relationshipTail = if (relationshipStatus.isBlank()) {
-            ""
-        } else {
-            " $relationshipStatus ho ya single, excuses sabko cheap lagte hain."
-        }
-        val gymTail = if (gymStatus.isBlank()) {
-            ""
-        } else {
-            " Gym status '$gymStatus' bolne se body aur confidence nahi banega."
-        }
-
-        return listOf(
-            "$nickname, $currentAppLabel phir se? $goal khud se complete nahi hoga.$fearTail",
-            "$nickname, abhi $currentAppLabel band kar. Discipline ke bina $goal sirf fantasy hai.$insecurityTail",
-            "$nickname, tu live mode me apna future trade kar raha hai for $currentAppLabel. Back to $goal.",
-            "$nickname, har swipe tera future salary aur respect ka cut hai.$professionTail",
-            "$nickname, focus tod ke tu apni image khud destroy kar raha hai.$relationshipTail",
-            "$nickname, $goal ka sapna bolta hai aur action me zero deta hai.$gymTail"
-        )
     }
 
     val profileFlow: Flow<UserProfileEntity?> = database.profileDao().observeProfile()
@@ -137,6 +85,7 @@ class LocalRepository(
                 withHeadphones = withHeadphones
             )
         )
+        database.eventLogDao().deleteOlderThan(System.currentTimeMillis() - EVENT_RETENTION_MILLIS)
     }
 
     suspend fun saveDailyCheckIn(morningPlan: String, nightReflection: String) {
@@ -187,7 +136,7 @@ class LocalRepository(
         val profession = profile?.profession.orEmpty()
         val relationshipStatus = leverageValue(leverage, "Relationship status")
         val gymStatus = leverageValue(leverage, "Gym status")
-        val personalizedFallbacks = personalizedFallbackLines(
+        val personalizedFallbacks = InterventionContent.personalizedFallbackLines(
             nickname = nickname,
             currentAppLabel = currentAppLabel,
             goal = goal,
@@ -200,7 +149,7 @@ class LocalRepository(
 
         val key = apiKeyFlow.first().trim()
         if (key.isBlank()) {
-            val noKeyLine = pickFreshLine(personalizedFallbacks)
+            val noKeyLine = InterventionContent.pickFreshLine(personalizedFallbacks, recentInterventionLines)
             rememberInterventionLine(noKeyLine)
             return noKeyLine
         }
@@ -282,14 +231,14 @@ class LocalRepository(
                 appendLine("Generate the savage bullying message RIGHT NOW.")
             }
 
-            val line = GroqClient().generateLine(
+            val line = groqClient.generateLine(
                 apiKey = key,
                 systemPrompt = systemPrompt,
                 userContext = userContext
             ).trim()
 
             val finalLine = if (line.isBlank() || recentInterventionLines.any { it.equals(line, ignoreCase = true) }) {
-                pickFreshLine(personalizedFallbacks)
+                InterventionContent.pickFreshLine(personalizedFallbacks, recentInterventionLines)
             } else {
                 line
             }
@@ -297,7 +246,7 @@ class LocalRepository(
             finalLine
         } catch (e: Exception) {
             Log.e("LocalRepository", "Groq intervention generation failed", e)
-            val finalFallback = pickFreshLine(personalizedFallbacks)
+            val finalFallback = InterventionContent.pickFreshLine(personalizedFallbacks, recentInterventionLines)
             rememberInterventionLine(finalFallback)
             finalFallback
         }
@@ -357,7 +306,7 @@ class LocalRepository(
                     appendLine("User message: $cleanMessage")
                 }
 
-                GroqClient().generateLine(key, systemPrompt, context)
+                groqClient.generateLine(key, systemPrompt, context)
                     .ifBlank { "$nickname, next step: put phone down for 10 minutes and start one task toward $goal." }
             } catch (e: Exception) {
                 Log.e("LocalRepository", "AI partner generation failed", e)
@@ -370,54 +319,7 @@ class LocalRepository(
     }
 
     fun parseLeverageJson(leverageJson: String): List<Pair<String, String>> {
-        return try {
-            val json = JSONObject(leverageJson)
-            json.keys().asSequence().map { key ->
-                key to json.optString(key)
-            }.toList()
-        } catch (_: Exception) {
-            emptyList()
-        }
-    }
-
-    fun encodeSimpleList(values: List<String>): String {
-        return JSONArray(values).toString()
-    }
-
-    suspend fun generateHumiliationPhrase(currentAppLabel: String, fallbackPhrase: String): String {
-        val profile = database.profileDao().getProfile()
-        val nickname = profile?.nickname ?: "You"
-        val insecurity = profile?.insecurity ?: ""
-        val goal = profile?.goal ?: ""
-        
-        val defaultFallback = fallbackPhrase.ifBlank { "Main lazy hu aur mera koi dream nahi hai" }
-        val key = apiKeyFlow.first()
-        if (key.isBlank()) return defaultFallback
-
-        return try {
-            val systemPrompt = """
-                Generate ONE extremely humiliating unlock phrase the user must type exactly.
-                Rules:
-                - Max 12 words
-                - Must be self-deprecating and savage
-                - Hindi preferred (or Hinglish) because it hurts more for Indian users
-                - Use their insecurity, goal, nickname, or current failure subtly
-                - Make them feel like a loser while typing it
-                - Never promote self-harm
-                Output ONLY the phrase, nothing else. No quotes, no prefix.
-            """.trimIndent()
-
-            val userContext = """
-                Nickname: $nickname
-                Insecurity: $insecurity
-                Goal failing: $goal
-                Current app: $currentAppLabel
-            """.trimIndent()
-
-            GroqClient().generateLine(key, systemPrompt, userContext)
-        } catch (_: Exception) {
-            defaultFallback
-        }
+        return InterventionContent.parseLeverageJson(leverageJson)
     }
 
     private suspend fun processSavageMemory(rawNote: String) {
@@ -437,7 +339,7 @@ class LocalRepository(
                 }
             """.trimIndent()
 
-            val rawJson = GroqClient().generateLine(key, systemPrompt, "User statement: $rawNote")
+            val rawJson = groqClient.generateLine(key, systemPrompt, "User statement: $rawNote")
             val cleanJson = rawJson.substringAfter("{").substringBeforeLast("}")
             val parsed = JSONObject("{$cleanJson}")
 
@@ -526,7 +428,7 @@ class LocalRepository(
             """.trimIndent()
 
             val contextStr = contextMap.entries.joinToString("\n") { "${it.key}: ${it.value}" }
-            val rawJson = GroqClient().generateLine(key, systemPrompt, "Context so far:\n$contextStr")
+            val rawJson = groqClient.generateLine(key, systemPrompt, "Context so far:\n$contextStr")
             val cleanJson = rawJson.substringAfter("{", "").substringBeforeLast("}", "")
             if (cleanJson.isBlank()) return@withContext localFallbackQuestion()
             "{$cleanJson}"
@@ -544,7 +446,7 @@ class LocalRepository(
         if (key.isBlank() || !key.startsWith("gsk_")) return null
 
         return try {
-            GroqClient().generateSpeech(apiKey = key, input = text)
+            groqClient.generateSpeech(apiKey = key, input = text)
         } catch (e: Exception) {
             if (shouldWarnForModelTerms(e)) {
                 Log.w(
@@ -555,5 +457,10 @@ class LocalRepository(
             Log.e("LocalRepository", "Groq TTS generation failed", e)
             null
         }
+    }
+
+    companion object {
+        private const val MAX_REMEMBERED_LINES = 5
+        private const val EVENT_RETENTION_MILLIS = 30L * 24L * 60L * 60L * 1000L
     }
 }

@@ -108,6 +108,9 @@ interface EventLogDao {
 
     @Insert
     suspend fun insert(entity: EventLogEntity)
+
+    @Query("DELETE FROM event_logs WHERE atMillis < :cutoffMillis")
+    suspend fun deleteOlderThan(cutoffMillis: Long): Int
 }
 
 @Dao
@@ -126,10 +129,4 @@ interface SemanticNotesDao {
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insert(entity: SemanticNoteEntity)
-
-    @Query("SELECT * FROM episodic_memories ORDER BY occurredAt DESC LIMIT 10")
-    fun observeEpisodic(): Flow<List<EpisodicMemoryEntity>>
-
-    @Insert(onConflict = OnConflictStrategy.REPLACE)
-    suspend fun insertEpisodic(entity: EpisodicMemoryEntity)
 }

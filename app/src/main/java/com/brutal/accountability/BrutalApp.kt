@@ -10,6 +10,7 @@ import androidx.work.WorkManager
 import com.brutal.accountability.data.AccountabilityDatabase
 import com.brutal.accountability.data.AppPrefs
 import com.brutal.accountability.data.LocalRepository
+import com.brutal.accountability.service.AppAccessibilityService
 import com.brutal.accountability.service.DailyCheckInWorker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -37,15 +38,15 @@ class BrutalApp : Application() {
         appScope.launch {
             val existing = repository.apiKeyFlow.first().trim()
             val buildKey = BuildConfig.GROQ_API_KEY.trim()
-            if (buildKey.startsWith("gsk_") && existing != buildKey) {
+            if (existing.isBlank() && buildKey.startsWith("gsk_")) {
                 repository.setApiKey(buildKey)
             }
         }
-        createChannel()
+        createNotificationChannels()
         scheduleDailyCheckIn()
     }
 
-    private fun createChannel() {
+    private fun createNotificationChannels() {
         val manager = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
         manager.createNotificationChannel(
             NotificationChannel(
@@ -53,6 +54,15 @@ class BrutalApp : Application() {
                 "Accountability",
                 NotificationManager.IMPORTANCE_DEFAULT
             )
+        )
+        manager.createNotificationChannel(
+            NotificationChannel(
+                AppAccessibilityService.INTERVENTION_CHANNEL_ID,
+                "Brutal Interventions",
+                NotificationManager.IMPORTANCE_HIGH
+            ).apply {
+                description = "Real-time interventions when restricted apps are opened."
+            }
         )
     }
 

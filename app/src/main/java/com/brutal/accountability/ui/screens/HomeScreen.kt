@@ -29,6 +29,9 @@ import com.brutal.accountability.ui.theme.TextMuted
 import com.brutal.accountability.ui.theme.TextPrimary
 import com.brutal.accountability.ui.theme.TextSecondary
 import kotlinx.coroutines.launch
+import java.time.Instant
+import java.time.LocalDate
+import java.time.ZoneId
 
 @Composable
 fun HomeScreen(
@@ -41,9 +44,10 @@ fun HomeScreen(
     }
     var isLoadingRoast by remember { mutableStateOf(false) }
 
-    val now = System.currentTimeMillis()
-    val dayMillis = 24L * 60L * 60L * 1000L
-    val opensToday = recentEvents.count { now - it.atMillis <= dayMillis }
+    val today = remember { LocalDate.now() }
+    val opensToday = recentEvents.count {
+        Instant.ofEpochMilli(it.atMillis).atZone(ZoneId.systemDefault()).toLocalDate() == today
+    }
     val opensRecent = recentEvents.size
 
     AnimatedScreen {
