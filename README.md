@@ -14,6 +14,18 @@ A **brutal Android accountability app** that uses AI interventions and strict ph
 - ⏰ **Daily Check-in Notifications** — WorkManager-scheduled reminders with local persistence
 - 🔐 **Secure API Key Storage** — Keys encrypted with Android Keystore (AES/GCM)
 
+## 📱 Screenshots
+
+| Home | AI Roast | AI Partner Chat |
+|------|----------|-----------------|
+| ![Home](docs/screenshots/01_home.png) | ![Roast](docs/screenshots/02_roast.png) | ![Chat](docs/screenshots/04_chat_reply.png) |
+
+| Settings | Live Intervention |
+|----------|-------------------|
+| ![Settings](docs/screenshots/05_settings_top.png) | ![Intervention](docs/screenshots/06_intervention_notification.png) |
+
+🎬 **Full demo video** (onboarding → roast → chat → live intervention when a restricted app opens): [`docs/demo.mp4`](docs/demo.mp4)
+
 ## 🛠️ Tech Stack
 
 | Technology | Purpose |
