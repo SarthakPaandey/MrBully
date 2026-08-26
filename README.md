@@ -16,15 +16,17 @@ A **brutal Android accountability app** that uses AI interventions and strict ph
 
 ## 📱 Screenshots
 
+![MrBully demo](docs/demo.gif)
+
 | Home | AI Roast | AI Partner Chat |
 |------|----------|-----------------|
-| ![Home](docs/screenshots/01_home.png) | ![Roast](docs/screenshots/02_roast.png) | ![Chat](docs/screenshots/04_chat_reply.png) |
+| <img src="docs/screenshots/01_home.png" width="260"/> | <img src="docs/screenshots/02_roast.png" width="260"/> | <img src="docs/screenshots/04_chat_reply.png" width="260"/> |
 
 | Settings | Live Intervention |
 |----------|-------------------|
-| ![Settings](docs/screenshots/05_settings_top.png) | ![Intervention](docs/screenshots/06_intervention_notification.png) |
+| <img src="docs/screenshots/05_settings_top.png" width="260"/> | <img src="docs/screenshots/06_intervention_notification.png" width="260"/> |
 
-🎬 **Full demo video** (onboarding → roast → chat → live intervention when a restricted app opens): [`docs/demo.mp4`](docs/demo.mp4)
+🎬 **Full-quality demo video** (onboarding → roast → chat → live intervention when a restricted app opens): [`docs/demo.mp4`](docs/demo.mp4)
 
 ## 🛠️ Tech Stack
 
